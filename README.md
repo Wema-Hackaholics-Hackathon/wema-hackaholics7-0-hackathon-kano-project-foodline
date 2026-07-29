@@ -16,7 +16,7 @@
 ## 🎯 The Problem
 What happens when your salary is guaranteed, but your children cannot eat food because kitchen is empty?
 
-Across Nigeria, hardworking salary earners still reach the final days before payday unable to buy enough food for their families. They are employed, financially visible and capable of repaymen, yet traditional credit rarely helps them purchase the one thing they cannot postpone: food.
+Across Nigeria, hardworking salary earners still reach the final days before payday unable to buy enough food for their families. They are employed, financially visible and capable of repayment, yet traditional credit rarely helps them purchase the one thing they cannot postpone: food.
 
 In June 2026, food prices were still 17.52% higher than a year earlier. Salaries, however, do not rise every time the price of rice, beans, cooking oil or garri increases.
 
