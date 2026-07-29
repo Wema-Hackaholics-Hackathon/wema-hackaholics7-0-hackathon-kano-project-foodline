@@ -6,7 +6,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const PROTECTED = ["/app", "/retailer", "/admin"];
 
-export function proxy(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const needsAuth = PROTECTED.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   if (!needsAuth) return NextResponse.next();
