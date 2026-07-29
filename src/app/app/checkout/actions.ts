@@ -14,6 +14,7 @@ import { availableCreditKobo } from "@/lib/debit-engine";
 import { getConfig } from "@/lib/settings";
 import { buildSchedule } from "@/lib/underwriting";
 import { placeOrder, type CheckoutResult } from "@/lib/checkout";
+import { suggestPickupStores, type StoreSuggestion } from "@/lib/pickup";
 
 export type RawLine = { productUnitId: string; qty: number };
 
@@ -48,6 +49,10 @@ export type CheckoutPrep =
       availableKobo: number;
       limitKobo: number;
       plans: PlanQuote[];
+      /** Partner stores, nearest to the customer's home address first */
+      pickupStores: StoreSuggestion[];
+      /** The address we measured from, for transparency */
+      pickupFromLabel: string | null;
     }
   | { ok: false; error: string };
 
@@ -163,6 +168,8 @@ export async function prepareCheckout(rawLines: RawLine[]): Promise<CheckoutPrep
     };
   });
 
+  const pickup = await suggestPickupStores(db, user.id);
+
   return {
     ok: true,
     lines,
@@ -172,19 +179,28 @@ export async function prepareCheckout(rawLines: RawLine[]): Promise<CheckoutPrep
     availableKobo,
     limitKobo: customer.creditLimitKobo,
     plans,
+    pickupStores: pickup.stores,
+    pickupFromLabel: pickup.fromLabel,
   };
 }
 
 export async function confirmOrder(
   rawLines: RawLine[],
-  installmentsCount: number
+  installmentsCount: number,
+  pickupRetailerId?: string | null
 ): Promise<CheckoutResult> {
   const user = await getSessionUser();
   if (!user || user.role !== "customer") {
     return { ok: false, error: "Your session has ended. Sign in again to continue." };
   }
   const db = getDb();
-  const result = await placeOrder(db, user.id, sanitize(rawLines), installmentsCount);
+  const result = await placeOrder(
+    db,
+    user.id,
+    sanitize(rawLines),
+    installmentsCount,
+    pickupRetailerId
+  );
   if (result.ok) {
     revalidatePath("/app");
     revalidatePath("/app/shop");

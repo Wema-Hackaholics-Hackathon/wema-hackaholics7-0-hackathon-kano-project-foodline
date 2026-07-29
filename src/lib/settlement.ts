@@ -6,48 +6,73 @@ import { formatNaira } from "./money";
 import { logEvent } from "./ledger";
 import { initiateTransfer, PaystackError } from "./paystack";
 
-export type RedeemResult =
-  | { ok: true; orderId: string; settlementStatus: "success" | "pending"; reference: string; amountKobo: number }
+// Handover requires BOTH sides to confirm: the retailer (who has checked the
+// order against what is on the counter) and the customer (who is standing
+// there receiving it). Money moves only when both have tapped confirm, so a
+// leaked voucher code on its own cannot trigger a payout.
+
+export type OrderRow = typeof orders.$inferSelect;
+
+export type ConfirmOutcome =
+  | {
+      ok: true;
+      state: "awaiting_customer";
+      orderId: string;
+      voucherCode: string;
+      amountKobo: number;
+    }
+  | {
+      ok: true;
+      state: "awaiting_retailer";
+      orderId: string;
+      voucherCode: string;
+      amountKobo: number;
+    }
+  | {
+      ok: true;
+      state: "settled";
+      orderId: string;
+      voucherCode: string;
+      amountKobo: number;
+      settlementStatus: "success" | "pending";
+      reference: string;
+      retailerId: string;
+    }
   | { ok: false; error: string };
 
+/** Shared matching rule: >= 32 chars is the QR token, else the short code. */
+export function matchOrderWhere(codeOrToken: string) {
+  const needle = codeOrToken.trim();
+  return needle.length >= 32
+    ? eq(orders.qrToken, needle)
+    : eq(orders.voucherCode, needle.toUpperCase().replace(/\s/g, ""));
+}
+
+function validateOrder(order: OrderRow | undefined): string | null {
+  if (!order) return "Card not found. Check the code and try again.";
+  if (order.status === "settled") return "This card has already been used.";
+  if (order.status === "cancelled") return "This card was cancelled.";
+  if (order.status === "expired" || order.expiresAt.getTime() < Date.now()) {
+    return "This card has expired. The customer can place a new order.";
+  }
+  return null;
+}
+
 /**
- * Retailer accepts a Foodline Card (QR token or short code), the order is
- * marked redeemed, and the retailer is paid instantly by Paystack transfer.
- * Test-mode transfers settle synchronously; demo retailers fall back to a
- * simulated settlement if Paystack is unreachable so a stage demo never
- * stalls on conference wifi.
+ * The retailer's half of the handover. Scanning the QR or entering the code
+ * is what counts as their confirmation.
  */
-export async function redeemAndSettle(
+export async function confirmByRetailer(
   db: Db,
   input: { codeOrToken: string; retailerId: string }
-): Promise<RedeemResult> {
-  const needle = input.codeOrToken.trim();
-  const normalizedCode = needle.toUpperCase().replace(/\s/g, "");
-
-  const order = (
-    await db
-      .select()
-      .from(orders)
-      .where(
-        needle.length >= 32
-          ? eq(orders.qrToken, needle)
-          : eq(orders.voucherCode, normalizedCode)
-      )
-      .limit(1)
-  )[0];
-
-  if (!order) return { ok: false, error: "Card not found. Check the code and try again." };
-  if (order.status === "redeemed" || order.status === "settled") {
-    return { ok: false, error: "This card has already been used." };
-  }
-  if (order.status === "cancelled") {
-    return { ok: false, error: "This card was cancelled." };
-  }
-  if (order.status === "expired" || order.expiresAt.getTime() < Date.now()) {
-    if (order.status !== "expired") {
+): Promise<ConfirmOutcome> {
+  const order = (await db.select().from(orders).where(matchOrderWhere(input.codeOrToken)).limit(1))[0];
+  const invalid = validateOrder(order);
+  if (invalid) {
+    if (order && order.status !== "expired" && order.expiresAt.getTime() < Date.now()) {
       await db.update(orders).set({ status: "expired" }).where(eq(orders.id, order.id));
     }
-    return { ok: false, error: "This card has expired. The customer can place a new order." };
+    return { ok: false, error: invalid };
   }
 
   const retailer = (
@@ -59,21 +84,117 @@ export async function redeemAndSettle(
   )[0];
   if (!retailer) return { ok: false, error: "Your retailer account is not active." };
 
+  if (order!.retailerConfirmedAt) {
+    // Already confirmed by a store: only settle-if-ready, do not double log
+    return finalizeIfReady(db, order!);
+  }
+
   const now = new Date();
   await db
     .update(orders)
-    .set({ status: "redeemed", redeemedAt: now, redeemedByRetailerId: retailer.id })
+    .set({ retailerConfirmedAt: now, redeemedByRetailerId: retailer.id })
+    .where(eq(orders.id, order!.id));
+  await logEvent(db, {
+    type: "order_redeemed",
+    customerId: order!.customerId,
+    orderId: order!.id,
+    actor: `retailer:${retailer.id}`,
+    message: `${retailer.businessName} confirmed card ${order!.voucherCode} for ${formatNaira(order!.totalKobo)}${
+      order!.customerConfirmedAt ? "" : ", waiting for the customer to confirm collection"
+    }`,
+  });
+
+  const refreshed = { ...order!, retailerConfirmedAt: now, redeemedByRetailerId: retailer.id };
+  return finalizeIfReady(db, refreshed);
+}
+
+/** The customer's half: they are at the counter receiving the goods. */
+export async function confirmByCustomer(
+  db: Db,
+  input: { orderId: string; customerId: string }
+): Promise<ConfirmOutcome> {
+  const order = (await db.select().from(orders).where(eq(orders.id, input.orderId)).limit(1))[0];
+  if (!order || order.customerId !== input.customerId) {
+    return { ok: false, error: "Card not found." };
+  }
+  const invalid = validateOrder(order);
+  if (invalid) return { ok: false, error: invalid };
+
+  if (order.customerConfirmedAt) return finalizeIfReady(db, order);
+
+  const now = new Date();
+  await db
+    .update(orders)
+    .set({ customerConfirmedAt: now })
     .where(eq(orders.id, order.id));
   await logEvent(db, {
     type: "order_redeemed",
     customerId: order.customerId,
     orderId: order.id,
-    actor: `retailer:${retailer.id}`,
-    message: `Card ${order.voucherCode} redeemed at ${retailer.businessName} for ${formatNaira(order.totalKobo)}`,
+    actor: `customer:${order.customerId}`,
+    message: `Customer confirmed collection of card ${order.voucherCode}${
+      order.retailerConfirmedAt ? "" : ", waiting for the store to confirm"
+    }`,
   });
 
+  return finalizeIfReady(db, { ...order, customerConfirmedAt: now });
+}
+
+/** Settle only when both sides have confirmed. */
+async function finalizeIfReady(db: Db, order: OrderRow): Promise<ConfirmOutcome> {
+  const base = {
+    ok: true as const,
+    orderId: order.id,
+    voucherCode: order.voucherCode,
+    amountKobo: order.totalKobo,
+  };
+  if (!order.retailerConfirmedAt) return { ...base, state: "awaiting_retailer" };
+  if (!order.customerConfirmedAt) return { ...base, state: "awaiting_customer" };
+  if (order.status === "settled") {
+    return {
+      ...base,
+      state: "settled",
+      settlementStatus: "success",
+      reference: "",
+      retailerId: order.redeemedByRetailerId ?? "",
+    };
+  }
+
+  const retailerId = order.redeemedByRetailerId;
+  if (!retailerId) return { ...base, state: "awaiting_retailer" };
+  const retailer = (
+    await db.select().from(retailers).where(eq(retailers.id, retailerId)).limit(1)
+  )[0];
+  if (!retailer) return { ok: false, error: "The confirming store could not be found." };
+
+  const now = new Date();
+  await db
+    .update(orders)
+    .set({ status: "redeemed", redeemedAt: now })
+    .where(eq(orders.id, order.id));
+
+  const settled = await settleOrder(db, order, retailer);
+  return {
+    ...base,
+    state: "settled",
+    settlementStatus: settled.status,
+    reference: settled.reference,
+    retailerId,
+  };
+}
+
+type RetailerRow = typeof retailers.$inferSelect;
+
+/** Instant Paystack payout to the retailer that honoured the card. */
+async function settleOrder(
+  db: Db,
+  order: OrderRow,
+  retailer: RetailerRow
+): Promise<{ status: "success" | "pending"; reference: string }> {
   const reference = paystackReference();
   const settlementId = uid();
+  const now = new Date();
+
   await db.insert(settlements).values({
     id: settlementId,
     orderId: order.id,
@@ -87,7 +208,7 @@ export async function redeemAndSettle(
     type: "settlement_initiated",
     customerId: order.customerId,
     orderId: order.id,
-    message: `Instant settlement of ${formatNaira(order.totalKobo)} to ${retailer.businessName} initiated (ref ${reference})`,
+    message: `Both sides confirmed. Settlement of ${formatNaira(order.totalKobo)} to ${retailer.businessName} initiated (ref ${reference})`,
     data: { settlementId, retailerId: retailer.id },
   });
 
@@ -122,20 +243,14 @@ export async function redeemAndSettle(
         : `Settlement queued with Paystack (status: ${transfer.status}); awaiting webhook confirmation`,
       data: { reference, transferCode: transfer.transfer_code, status: transfer.status },
     });
-    return {
-      ok: true,
-      orderId: order.id,
-      settlementStatus: final ? "success" : "pending",
-      reference,
-      amountKobo: order.totalKobo,
-    };
+    return { status: final ? "success" : "pending", reference };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Transfer failed";
     if (retailer.isDemo) {
-      // Stage-demo resilience: simulate the payout rather than stall the pitch
+      // Stage resilience: simulate the payout rather than stall the pitch
       await db
         .update(settlements)
-        .set({ status: "success", settledAt: new Date(), failureReason: null })
+        .set({ status: "success", settledAt: new Date() })
         .where(eq(settlements.id, settlementId));
       await db.update(orders).set({ status: "settled" }).where(eq(orders.id, order.id));
       await logEvent(db, {
@@ -145,13 +260,7 @@ export async function redeemAndSettle(
         message: `Settlement simulated for demo retailer (Paystack unreachable: ${message})`,
         data: { reference },
       });
-      return {
-        ok: true,
-        orderId: order.id,
-        settlementStatus: "success",
-        reference,
-        amountKobo: order.totalKobo,
-      };
+      return { status: "success", reference };
     }
     await db
       .update(settlements)
@@ -161,17 +270,9 @@ export async function redeemAndSettle(
       type: "settlement_result",
       customerId: order.customerId,
       orderId: order.id,
-      message: `Settlement to ${retailer.businessName} failed: ${message}. Order stays redeemed; operations can retry from the admin ledger.`,
+      message: `Settlement to ${retailer.businessName} failed: ${message}. The goods were released; operations can retry from the ledger.`,
       data: { reference },
     });
-    // The card was honoured; the payout failure is an operations problem,
-    // not the customer's. Surface success with a note.
-    return {
-      ok: true,
-      orderId: order.id,
-      settlementStatus: "pending",
-      reference,
-      amountKobo: order.totalKobo,
-    };
+    return { status: "pending", reference };
   }
 }

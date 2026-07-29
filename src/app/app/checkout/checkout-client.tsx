@@ -7,8 +7,10 @@ import {
   Check,
   ChevronDown,
   Loader2,
+  MapPin,
   ShieldCheck,
   ShoppingBasket,
+  Store,
 } from "lucide-react";
 import { Button, Card, EmptyState, Notice, Skeleton, cn } from "@/components/ui";
 import { formatNaira } from "@/lib/money";
@@ -47,6 +49,8 @@ export function CheckoutClient() {
   const [prepError, setPrepError] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(true);
   const [selected, setSelected] = useState<number | null>(null);
+  const [storeId, setStoreId] = useState<string | null>(null);
+  const [showAllStores, setShowAllStores] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(false);
@@ -63,6 +67,12 @@ export function CheckoutClient() {
           if (prev !== null && usable.some((p) => p.installments === prev)) return prev;
           return usable[0]?.installments ?? null;
         });
+        // Default to the nearest store, keeping any choice already made
+        setStoreId((prev) =>
+          prev && result.pickupStores.some((s) => s.id === prev)
+            ? prev
+            : (result.pickupStores[0]?.id ?? null)
+        );
       } else {
         setPrepError(result.error);
       }
@@ -87,7 +97,8 @@ export function CheckoutClient() {
     try {
       const result = await confirmOrder(
         prep.lines.map((l) => ({ productUnitId: l.productUnitId, qty: l.qty })),
-        selected
+        selected,
+        storeId
       );
       if (result.ok) {
         setRedirecting(true);
@@ -309,6 +320,88 @@ export function CheckoutClient() {
                 </Button>
               </div>
             </Notice>
+          )}
+
+          {prep.pickupStores.length > 0 && (
+            <fieldset>
+              <legend className="mb-1 font-display text-lg text-espresso">
+                Where will you collect?
+              </legend>
+              <p className="mb-3 text-[13px] leading-relaxed text-ash">
+                {prep.pickupFromLabel
+                  ? `Sorted by distance from ${prep.pickupFromLabel}. Your card goes straight to the store you pick.`
+                  : "Your card goes straight to the store you pick, so they see your order before you arrive."}
+              </p>
+              <div className="space-y-2">
+                {(showAllStores ? prep.pickupStores : prep.pickupStores.slice(0, 3)).map(
+                  (store, index) => {
+                    const active = storeId === store.id;
+                    return (
+                      <label
+                        key={store.id}
+                        className={cn(
+                          "flex cursor-pointer items-start gap-3 rounded-md border p-4 transition-colors",
+                          active
+                            ? "border-terra bg-terra-tint"
+                            : "border-crust bg-white hover:border-cocoa/40"
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          name="pickupStore"
+                          value={store.id}
+                          checked={active}
+                          onChange={() => setStoreId(store.id)}
+                          className="sr-only"
+                        />
+                        <span
+                          className={cn(
+                            "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border-2",
+                            active ? "border-terra bg-terra text-white" : "border-crust"
+                          )}
+                          aria-hidden
+                        >
+                          {active && <Check className="size-3" strokeWidth={3} />}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span className="text-[15px] font-medium text-espresso">
+                              {store.businessName}
+                            </span>
+                            {index === 0 && !showAllStores && store.distanceLabel && (
+                              <span className="rounded-full bg-good-tint px-2 py-0.5 text-[11px] font-medium text-good">
+                                Nearest
+                              </span>
+                            )}
+                          </span>
+                          {store.address && (
+                            <span className="mt-0.5 block text-[13px] leading-snug text-ash">
+                              {store.address}
+                            </span>
+                          )}
+                          <span className="mt-1 flex items-center gap-1 text-[13px] text-cocoa">
+                            <MapPin className="size-3.5 shrink-0" aria-hidden />
+                            {store.distanceLabel ?? "Distance unavailable"}
+                          </span>
+                        </span>
+                      </label>
+                    );
+                  }
+                )}
+              </div>
+              {prep.pickupStores.length > 3 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllStores((s) => !s)}
+                  className="mt-2 inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-terra-deep hover:underline"
+                >
+                  <Store className="size-4" aria-hidden />
+                  {showAllStores
+                    ? "Show nearest stores only"
+                    : `See all ${prep.pickupStores.length} partner stores`}
+                </button>
+              )}
+            </fieldset>
           )}
 
           {selectedPlan && (
