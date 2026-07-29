@@ -14,9 +14,19 @@
 - **Judge Access:** open [https://foodline.com.ng/login](https://foodline.com.ng/login) and expand "Judge access" for one-tap demo credentials (customer, retailer, admin)
 
 ## 🎯 The Problem
-**How might we build an Open Banking solution that creates accessible credit for everyday needs?**
+What happens when your salary is guaranteed—but food in your children cannot eat food because kitchen is empty?
 
-Currently, many Nigerian salary earners struggle to afford bulk food purchases before payday. Foodline tackles this by answering the most universal expense in Nigeria: food.
+Across Nigeria, hardworking salary earners still reach the final days before payday unable to buy enough food for their families. They are employed, financially visible and capable of repaymen, yet traditional credit rarely helps them purchase the one thing they cannot postpone: food.
+
+In June 2026, food prices were still 17.52% higher than a year earlier. Salaries, however, do not rise every time the price of rice, beans, cooking oil or garri increases.
+
+The result is a painful contradiction:
+
+A parent can have a stable job, a verified monthly salary and money arriving in a few days, yet still have an empty kitchen tonight.
+
+Existing lending platforms usually provide cash loans with high costs, weak affordability checks and no guarantee that the credit solves the customer’s essential need. Meanwhile, retailers lose dependable customers who could afford bulk food purchases if payment could be aligned responsibly with their salary cycle.
+
+Nigeria needs a responsible credit system that understands a worker’s real salary history, allows families to buy essential food when they need it, pays local retailers immediately and collects repayment transparently when the customer’s salary arrives. Because hunger does not wait for payday.
 
 ## ✨ Our Solution
 Foodline is a digital foodstuff credit line for verified Nigerian salary earners. It leverages Open Banking to securely assess a user's salary history, determine a responsible credit limit, and provide a digital Foodline Card to purchase food from verified partner stores. 
