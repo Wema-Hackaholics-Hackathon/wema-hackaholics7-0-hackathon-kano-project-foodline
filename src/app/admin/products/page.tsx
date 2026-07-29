@@ -1,18 +1,21 @@
-import { and, asc, eq, like, or, type SQL } from "drizzle-orm";
+import Link from "next/link";
+import { and, asc, eq, isNull, like, or, type SQL } from "drizzle-orm";
 import { Package } from "lucide-react";
 import { getDb } from "@/db";
-import { productUnits, products } from "@/db/schema";
+import { productUnits, products, retailers } from "@/db/schema";
 import { Button, Card, EmptyState, PageTitle, Select, inputCls } from "@/components/ui";
 import { ProductsTable, unitSummary, type ProductRow } from "./products-table";
 
 export const dynamic = "force-dynamic";
 
+const FOODLINE = "foodline";
+
 export default async function ProductsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; category?: string }>;
+  searchParams: Promise<{ q?: string; category?: string; shop?: string }>;
 }) {
-  const { q, category } = await searchParams;
+  const { q, category, shop } = await searchParams;
   const db = getDb();
 
   const filters: SQL[] = [];
@@ -21,10 +24,13 @@ export default async function ProductsPage({
     filters.push(or(like(products.name, term), like(products.category, term))!);
   }
   if (category) filters.push(eq(products.category, category));
+  if (shop === FOODLINE) filters.push(isNull(products.retailerId));
+  else if (shop) filters.push(eq(products.retailerId, shop));
 
   const rows = await db
-    .select()
+    .select({ product: products, shopName: retailers.businessName })
     .from(products)
+    .leftJoin(retailers, eq(products.retailerId, retailers.id))
     .where(filters.length ? and(...filters) : undefined)
     .orderBy(asc(products.category), asc(products.name));
 
@@ -40,26 +46,37 @@ export default async function ProductsPage({
     ...new Set((await db.select({ category: products.category }).from(products)).map((r) => r.category)),
   ].sort();
 
-  const tableRows: ProductRow[] = rows.map((p) => {
+  const allShops = await db
+    .select({ id: retailers.id, businessName: retailers.businessName })
+    .from(retailers)
+    .orderBy(asc(retailers.businessName));
+
+  const tableRows: ProductRow[] = rows.map(({ product: p, shopName }) => {
     const list = byProduct.get(p.id) ?? [];
     return {
       id: p.id,
       name: p.name,
       category: p.category,
       imageKey: p.imageKey,
+      shopName: shopName ?? "Foodline catalog",
+      status: p.status,
+      markupBps: p.markupBps,
       active: p.active,
       unitSummary: unitSummary(list),
       totalStock: list.reduce((s, u) => s + u.stockQty, 0),
     };
   });
 
-  const filtered = Boolean(q || category);
+  const pendingCount = tableRows.filter((r) => r.status === "pending").length;
+  const filtered = Boolean(q || category || shop);
 
   return (
     <div className="space-y-5">
       <PageTitle
         title="Catalog"
-        sub={`${rows.length} product${rows.length === 1 ? "" : "s"} priced in real market units.`}
+        sub={`${rows.length} listing${
+          rows.length === 1 ? "" : "s"
+        } across partner shops, priced in real market units.`}
         right={<Button href="/admin/products/new">Add product</Button>}
       />
 
@@ -85,6 +102,18 @@ export default async function ProductsPage({
               ))}
             </Select>
           </label>
+          <label className="min-w-45">
+            <span className="block text-sm font-medium text-cocoa mb-1.5">Shop</span>
+            <Select name="shop" defaultValue={shop ?? ""}>
+              <option value="">All shops</option>
+              <option value={FOODLINE}>Foodline catalog</option>
+              {allShops.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.businessName}
+                </option>
+              ))}
+            </Select>
+          </label>
           <Button type="submit" className="h-12">
             Filter
           </Button>
@@ -96,6 +125,17 @@ export default async function ProductsPage({
         </form>
       </Card>
 
+      {pendingCount > 0 && (
+        <p className="text-[13px] text-ash">
+          {pendingCount} listing{pendingCount === 1 ? " is" : "s are"} still waiting on a markup
+          decision.{" "}
+          <Link href="/admin/approvals?tab=listings" className="text-terra-deep hover:underline">
+            Open Approvals
+          </Link>
+          .
+        </p>
+      )}
+
       {tableRows.length === 0 ? (
         <Card>
           <EmptyState
@@ -104,7 +144,7 @@ export default async function ProductsPage({
             body={
               filtered
                 ? "Try a different word, or clear the filter to see the whole catalog."
-                : "Add your first product and the shop opens for customers straight away."
+                : "Add a product for a partner shop, or wait for a shop to send its first listing in."
             }
             action={
               filtered ? (

@@ -38,6 +38,11 @@ export function LandingFooter() {
                   </Link>
                 </li>
                 <li>
+                  <Link href="/partner" className={FOOTER_LINK_CLS}>
+                    Become a partner store
+                  </Link>
+                </li>
+                <li>
                   <Link href="/login" className={FOOTER_LINK_CLS}>
                     Partner sign-in
                   </Link>

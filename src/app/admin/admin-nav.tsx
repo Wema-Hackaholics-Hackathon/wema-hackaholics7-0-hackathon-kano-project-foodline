@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
   LayoutDashboard,
+  ClipboardCheck,
   Package,
   Store,
   Banknote,
@@ -20,6 +21,7 @@ import { logout } from "@/lib/auth-actions";
 
 const ITEMS = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  { href: "/admin/approvals", label: "Approvals", icon: ClipboardCheck, exact: false },
   { href: "/admin/products", label: "Catalog", icon: Package, exact: false },
   { href: "/admin/retailers", label: "Partner stores", icon: Store, exact: false },
   { href: "/admin/loans", label: "Loan book", icon: Banknote, exact: false },

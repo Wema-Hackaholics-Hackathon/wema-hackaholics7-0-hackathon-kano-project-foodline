@@ -3,18 +3,38 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Utensils } from "lucide-react";
-import { Button, Card, cn } from "@/components/ui";
+import { Button, Card, Pill, cn, type Tone } from "@/components/ui";
 import { formatNaira } from "@/lib/money";
+import { formatBps } from "../approvals/review-state";
 import { bulkSetActive, toggleProductActive } from "./actions";
+
+export type ProductStatus = "pending" | "approved" | "rejected" | "archived";
 
 export type ProductRow = {
   id: string;
   name: string;
   category: string;
   imageKey: string | null;
+  shopName: string;
+  status: ProductStatus;
+  markupBps: number | null;
   active: boolean;
   unitSummary: string;
   totalStock: number;
+};
+
+const STATUS_LABEL: Record<ProductStatus, string> = {
+  approved: "Live",
+  pending: "Pending",
+  rejected: "Rejected",
+  archived: "Archived",
+};
+
+const STATUS_TONE: Record<ProductStatus, Tone> = {
+  approved: "good",
+  pending: "warn",
+  rejected: "bad",
+  archived: "neutral",
 };
 
 function Thumb({ src, alt }: { src: string | null; alt: string }) {
@@ -114,10 +134,15 @@ export function ProductsTable({ rows }: { rows: ProductRow[] }) {
                   />
                 </th>
                 <th className="px-3 py-2.5 text-[13px] font-medium text-cocoa">Product</th>
+                <th className="px-3 py-2.5 text-[13px] font-medium text-cocoa">Shop</th>
                 <th className="px-3 py-2.5 text-[13px] font-medium text-cocoa">Units</th>
+                <th className="px-3 py-2.5 text-[13px] font-medium text-cocoa whitespace-nowrap">
+                  Markup
+                </th>
                 <th className="px-3 py-2.5 text-[13px] font-medium text-cocoa whitespace-nowrap">
                   Stock
                 </th>
+                <th className="px-3 py-2.5 text-[13px] font-medium text-cocoa">Status</th>
                 <th className="px-3 py-2.5 text-[13px] font-medium text-cocoa">Available</th>
                 <th className="px-3 py-2.5" />
               </tr>
@@ -147,12 +172,33 @@ export function ProductsTable({ rows }: { rows: ProductRow[] }) {
                       </div>
                     </div>
                   </td>
+                  <td className="px-3 py-3 text-[13px] text-cocoa max-w-45 truncate">
+                    {row.shopName}
+                  </td>
                   <td className="px-3 py-3 text-[13px] text-cocoa min-w-45">{row.unitSummary}</td>
+                  <td className="px-3 py-3 text-[13px] text-cocoa tnum whitespace-nowrap">
+                    {row.markupBps == null ? (
+                      <span className="text-ash">Not set</span>
+                    ) : (
+                      formatBps(row.markupBps)
+                    )}
+                  </td>
                   <td className="px-3 py-3 text-sm text-cocoa tnum">{row.totalStock}</td>
+                  <td className="px-3 py-3">
+                    <Pill tone={STATUS_TONE[row.status]}>{STATUS_LABEL[row.status]}</Pill>
+                  </td>
                   <td className="px-3 py-3">
                     <ActiveToggle id={row.id} active={row.active} />
                   </td>
                   <td className="px-3 py-3 text-right whitespace-nowrap">
+                    {row.status === "pending" && (
+                      <Link
+                        href="/admin/approvals?tab=listings"
+                        className="text-sm text-terra-deep hover:underline mr-3"
+                      >
+                        Review
+                      </Link>
+                    )}
                     <Link
                       href={`/admin/products/${row.id}/edit`}
                       className="text-sm text-terra-deep hover:underline"

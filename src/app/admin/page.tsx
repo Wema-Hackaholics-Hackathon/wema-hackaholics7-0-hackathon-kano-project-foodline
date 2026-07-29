@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { and, desc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import {
+  ArrowRight,
   CircleCheck,
   CircleDollarSign,
+  ClipboardCheck,
   Clock,
   TriangleAlert,
   Ban,
@@ -22,6 +24,7 @@ import {
 import { formatNaira, formatNairaWhole } from "@/lib/money";
 import { addDays, formatDate, formatDateShort, formatDateTime, todayLagos } from "@/lib/dates";
 import { getConfig } from "@/lib/settings";
+import { pendingCounts } from "@/lib/approvals";
 import { Card, EmptyState, PageTitle, Pill, Stat } from "@/components/ui";
 import { RedemptionsChart, type Day } from "./redemptions-chart";
 
@@ -33,6 +36,7 @@ const UNPAID = ["scheduled", "processing", "failed", "overdue"] as const;
 export default async function AdminDashboard() {
   const db = getDb();
   const config = await getConfig(db);
+  const waiting = await pendingCounts(db);
   const today = todayLagos();
   const monthStart = new Date(`${today.slice(0, 7)}-01T00:00:00Z`);
   const dayStart = new Date(`${today}T00:00:00Z`);
@@ -151,6 +155,35 @@ export default async function AdminDashboard() {
           config.debitTrigger === "salary_detection" ? "on salary detection" : "on the due date"
         }.`}
       />
+
+      {waiting.total > 0 && (
+        <Link href="/admin/approvals" className="block group">
+          <Card className="bg-warn-tint border-warn/25 hover:border-warn/50 transition-colors">
+            <div className="flex items-center gap-4">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-white text-warn">
+                <ClipboardCheck className="size-5" aria-hidden />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-display text-lg text-warn leading-tight">
+                  <span className="tnum">{waiting.total}</span> waiting for approval
+                </p>
+                <p className="text-[13px] text-warn/85 mt-0.5 leading-relaxed">
+                  {waiting.retailers} shop application{waiting.retailers === 1 ? "" : "s"} and{" "}
+                  {waiting.products} product listing{waiting.products === 1 ? "" : "s"}. Shops
+                  cannot trade and listings stay off the shelf until you decide.
+                </p>
+              </div>
+              <span className="hidden sm:inline-flex items-center gap-1.5 shrink-0 text-sm font-medium text-warn">
+                Open the queue
+                <ArrowRight
+                  className="size-4 transition-transform group-hover:translate-x-0.5"
+                  aria-hidden
+                />
+              </span>
+            </div>
+          </Card>
+        </Link>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card>

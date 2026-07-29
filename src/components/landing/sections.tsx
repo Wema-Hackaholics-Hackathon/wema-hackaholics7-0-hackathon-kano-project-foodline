@@ -216,7 +216,10 @@ export function PartnerStrip() {
             </li>
           </ul>
         </div>
-        <div className="mt-8 shrink-0 lg:mt-0">
+        <div className="mt-8 flex shrink-0 flex-col gap-3 sm:flex-row lg:mt-0 lg:flex-col">
+          <Button href="/partner" size="lg" className="w-full sm:w-auto">
+            Become a partner store
+          </Button>
           <Button href="/login" variant="secondary" size="lg" className="w-full sm:w-auto">
             Partner sign-in
           </Button>

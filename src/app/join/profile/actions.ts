@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { customers } from "@/db/schema";
 import { todayLagos } from "@/lib/dates";
+import { geocodeAddress } from "@/lib/geo";
 import { loadJoin, resumePath } from "../flow";
 
 export type ProfileErrors = {
@@ -68,6 +69,8 @@ export async function saveProfile(_prev: ProfileState, formData: FormData): Prom
   }
   if (Object.keys(errors).length > 0) return { errors, error: null };
 
+  const geo = await geocodeAddress(address);
+
   const db = getDb();
   const now = new Date();
   if (customer) {
@@ -79,6 +82,9 @@ export async function saveProfile(_prev: ProfileState, formData: FormData): Prom
         employerName,
         workEmail,
         address,
+        lat: geo?.lat ?? null,
+        lng: geo?.lng ?? null,
+        geoLabel: geo?.label ?? null,
         updatedAt: now,
         ...(customer.stage === "profile" ? { stage: "link_account" as const } : {}),
       })
@@ -91,6 +97,9 @@ export async function saveProfile(_prev: ProfileState, formData: FormData): Prom
       employerName,
       workEmail,
       address,
+      lat: geo?.lat ?? null,
+      lng: geo?.lng ?? null,
+      geoLabel: geo?.label ?? null,
       stage: "link_account",
       createdAt: now,
       updatedAt: now,

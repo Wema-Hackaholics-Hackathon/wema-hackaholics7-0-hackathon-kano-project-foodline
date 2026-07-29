@@ -9,6 +9,7 @@ import { Logo } from "@/components/logo";
 import { Button, DemoBadge } from "@/components/ui";
 import { RetailerNav } from "./retailer-nav";
 import { AutoSignOut } from "./account-state";
+import { StatusGate } from "./pending/status-gate";
 
 export default async function RetailerLayout({ children }: { children: ReactNode }) {
   const user = await requireRole("retailer");
@@ -28,7 +29,13 @@ export default async function RetailerLayout({ children }: { children: ReactNode
     );
   }
 
-  if (!retailer.active) {
+  // Applications wait outside the trading shell: pending shops may prepare
+  // their listings, declined shops see only their decision.
+  if (retailer.status === "pending" || retailer.status === "rejected") {
+    return <StatusGate retailer={retailer}>{children}</StatusGate>;
+  }
+
+  if (!retailer.active || retailer.status === "suspended") {
     return (
       <div className="flex min-h-dvh flex-1 flex-col">
         <div className="awning h-1 shrink-0" aria-hidden />
