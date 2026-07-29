@@ -44,7 +44,14 @@ export async function ensureCustomerPoint(
   if (!geo) return { point: null, label: null };
   await db
     .update(customers)
-    .set({ lat: geo.lat, lng: geo.lng, geoLabel: geo.label, updatedAt: new Date() })
+    .set({
+      lat: geo.lat,
+      lng: geo.lng,
+      geoLabel: geo.label,
+      state: geo.state,
+      lga: geo.lga,
+      updatedAt: new Date(),
+    })
     .where(eq(customers.id, customerId));
   return { point: { lat: geo.lat, lng: geo.lng }, label: geo.label };
 }
@@ -63,7 +70,7 @@ export async function ensureRetailerPoint(db: Db, retailerId: string): Promise<v
   if (!geo) return;
   await db
     .update(retailers)
-    .set({ lat: geo.lat, lng: geo.lng, geoLabel: geo.label })
+    .set({ lat: geo.lat, lng: geo.lng, geoLabel: geo.label, state: geo.state, lga: geo.lga })
     .where(eq(retailers.id, retailerId));
 }
 

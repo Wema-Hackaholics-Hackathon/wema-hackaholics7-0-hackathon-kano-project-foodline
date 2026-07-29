@@ -15,6 +15,13 @@
       "when": 1785334245480,
       "tag": "0001_milky_dazzler",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785347087023,
+      "tag": "0002_elite_sleeper",
+      "breakpoints": true
     }
   ]
 }

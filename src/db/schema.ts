@@ -50,8 +50,10 @@ export const customers = sqliteTable("customers", {
   employerName: text("employer_name").notNull(),
   workEmail: text("work_email").notNull(),
   address: text("address"),
-  // Geocoded home address, used to recommend the nearest pickup store.
+  // Geocoded home address, used to recommend nearby pickup stores.
   // Cached so the demo never depends on a live geocoding call.
+  state: text("state"),
+  lga: text("lga"),
   lat: real("lat"),
   lng: real("lng"),
   geoLabel: text("geo_label"),
@@ -144,19 +146,38 @@ export const salaryDetections = sqliteTable(
 // Catalog
 // ---------------------------------------------------------------------------
 
+// Products belong to the partner shop that stocks them. A retailer lists a
+// product with the price they need (cost) and a suggested markup; it stays
+// pending until an admin sets the final markup and approves it live.
 export const products = sqliteTable(
   "products",
   {
     id: text("id").primaryKey(),
+    retailerId: text("retailer_id").references(() => retailers.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     description: text("description").notNull(),
     category: text("category").notNull(),
     imageKey: text("image_key"), // R2 object key
+    status: text("status", { enum: ["pending", "approved", "rejected", "archived"] })
+      .notNull()
+      .default("pending"),
+    /** Retailer's recommendation to the admin, in basis points */
+    suggestedMarkupBps: integer("suggested_markup_bps").notNull().default(1000),
+    /** Markup the admin actually applied, in basis points. Never shown to customers. */
+    markupBps: integer("markup_bps"),
+    rejectionReason: text("rejection_reason"),
+    submittedBy: text("submitted_by"), // retailer:<id> or admin:<id>
+    reviewedBy: text("reviewed_by"),
+    reviewedAt: integer("reviewed_at", { mode: "timestamp_ms" }),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   },
-  (t) => [index("products_category_idx").on(t.category)]
+  (t) => [
+    index("products_category_idx").on(t.category),
+    index("products_retailer_idx").on(t.retailerId, t.status),
+    index("products_status_idx").on(t.status),
+  ]
 );
 
 // A product sells in one or more market units (mudu, congo, paint bucket,
@@ -169,6 +190,9 @@ export const productUnits = sqliteTable(
       .notNull()
       .references(() => products.id, { onDelete: "cascade" }),
     unitLabel: text("unit_label").notNull(), // e.g. "1 mudu", "50kg bag"
+    /** What the retailer is paid for this unit. Never shown to customers. */
+    costKobo: integer("cost_kobo").notNull().default(0),
+    /** What the customer pays: cost + admin markup. The only public figure. */
     priceKobo: integer("price_kobo").notNull(),
     stockQty: integer("stock_qty").notNull().default(0),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
@@ -181,26 +205,51 @@ export const productUnits = sqliteTable(
 // Retailers
 // ---------------------------------------------------------------------------
 
-export const retailers = sqliteTable("retailers", {
-  // Same id as the owning user row
-  id: text("id")
-    .primaryKey()
-    .references(() => users.id, { onDelete: "cascade" }),
-  businessName: text("business_name").notNull(),
-  contactPhone: text("contact_phone"),
-  address: text("address"),
-  lat: real("lat"),
-  lng: real("lng"),
-  geoLabel: text("geo_label"),
-  settlementBankCode: text("settlement_bank_code").notNull(),
-  settlementBankName: text("settlement_bank_name").notNull(),
-  settlementAccountNumber: text("settlement_account_number").notNull(),
-  settlementAccountName: text("settlement_account_name").notNull(), // Paystack-resolved
-  paystackRecipientCode: text("paystack_recipient_code"),
-  active: integer("active", { mode: "boolean" }).notNull().default(true),
-  isDemo: integer("is_demo", { mode: "boolean" }).notNull().default(false),
-  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
-});
+export const retailers = sqliteTable(
+  "retailers",
+  {
+    // Same id as the owning user row
+    id: text("id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    businessName: text("business_name").notNull(),
+    ownerName: text("owner_name"),
+    contactPhone: text("contact_phone"),
+    address: text("address"),
+    // Service area, resolved from the address at geocoding time
+    state: text("state"),
+    lga: text("lga"),
+    lat: real("lat"),
+    lng: real("lng"),
+    geoLabel: text("geo_label"),
+    // Business identity
+    rcNumber: text("rc_number"),
+    businessType: text("business_type"), // e.g. Provision store, Open market stall
+    yearsTrading: integer("years_trading"),
+    description: text("description"),
+    settlementBankCode: text("settlement_bank_code").notNull(),
+    settlementBankName: text("settlement_bank_name").notNull(),
+    settlementAccountNumber: text("settlement_account_number").notNull(),
+    settlementAccountName: text("settlement_account_name").notNull(),
+    /** false when demo mode let them onboard without a Paystack name check */
+    bankVerified: integer("bank_verified", { mode: "boolean" }).notNull().default(false),
+    paystackRecipientCode: text("paystack_recipient_code"),
+    // Applications land as pending and go live only when an admin approves
+    status: text("status", { enum: ["pending", "approved", "rejected", "suspended"] })
+      .notNull()
+      .default("pending"),
+    rejectionReason: text("rejection_reason"),
+    reviewedBy: text("reviewed_by"),
+    reviewedAt: integer("reviewed_at", { mode: "timestamp_ms" }),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    isDemo: integer("is_demo", { mode: "boolean" }).notNull().default(false),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [
+    index("retailers_status_idx").on(t.status),
+    index("retailers_area_idx").on(t.state, t.lga),
+  ]
+);
 
 // ---------------------------------------------------------------------------
 // Orders + vouchers (the Foodline Card)
@@ -257,8 +306,11 @@ export const orderItems = sqliteTable(
     productName: text("product_name").notNull(),
     unitLabel: text("unit_label").notNull(),
     unitPriceKobo: integer("unit_price_kobo").notNull(),
+    /** Retailer's share per unit at the time of sale; the rest is Foodline's markup */
+    unitCostKobo: integer("unit_cost_kobo").notNull().default(0),
     qty: integer("qty").notNull(),
     lineTotalKobo: integer("line_total_kobo").notNull(),
+    lineCostKobo: integer("line_cost_kobo").notNull().default(0),
   },
   (t) => [index("order_items_order_idx").on(t.orderId)]
 );
@@ -429,7 +481,10 @@ export const settlements = sqliteTable(
     retailerId: text("retailer_id")
       .notNull()
       .references(() => retailers.id),
+    /** Paid to the retailer: the cost portion of the order, not the customer total */
     amountKobo: integer("amount_kobo").notNull(),
+    /** Foodline's retained markup on this order, for the P&L view */
+    markupKobo: integer("markup_kobo").notNull().default(0),
     status: text("status", {
       enum: ["pending", "success", "failed", "reversed"],
     })

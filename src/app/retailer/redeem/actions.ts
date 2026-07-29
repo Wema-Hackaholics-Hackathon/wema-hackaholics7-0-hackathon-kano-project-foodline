@@ -37,7 +37,10 @@ export type ConfirmResult =
   | {
       ok: true;
       state: "settled";
+      /** What the shop receives, after Foodline's markup is retained */
       amountKobo: number;
+      /** What the customer paid on their credit line */
+      customerPaidKobo: number;
       reference: string;
       settlementStatus: "success" | "pending";
       bankName: string;
@@ -199,7 +202,8 @@ export async function confirmRedeem(codeOrToken: string): Promise<ConfirmResult>
   return {
     ok: true,
     state: "settled",
-    amountKobo: result.amountKobo,
+    amountKobo: result.retailerAmountKobo,
+    customerPaidKobo: result.amountKobo,
     reference: result.reference,
     settlementStatus: result.settlementStatus,
     bankName: retailer?.settlementBankName ?? "your settlement account",

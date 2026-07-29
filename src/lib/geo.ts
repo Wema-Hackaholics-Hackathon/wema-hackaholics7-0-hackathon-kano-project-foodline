@@ -8,10 +8,24 @@ import { getEnvOptional } from "./env";
 // of Nigerian places, which is enough to rank stores sensibly.
 
 export type Point = { lat: number; lng: number };
-export type GeoResult = Point & { label: string; source: "google" | "keyword" };
+export type GeoResult = Point & {
+  label: string;
+  source: "google" | "keyword";
+  /** Nigerian state, e.g. "Lagos" */
+  state: string | null;
+  /** Local government area, e.g. "Kosofe" */
+  lga: string | null;
+};
 
 /** Loose fallback gazetteer: Lagos areas first, then major cities. */
-const PLACES: { keys: string[]; label: string; lat: number; lng: number }[] = [
+const PLACES: {
+  keys: string[];
+  label: string;
+  lat: number;
+  lng: number;
+  state?: string;
+  lga?: string;
+}[] = [
   { keys: ["mile 12", "mile12", "ketu", "ojota"], label: "Mile 12, Lagos", lat: 6.6015, lng: 3.3969 },
   { keys: ["lekki", "chevron", "ikate"], label: "Lekki, Lagos", lat: 6.4478, lng: 3.4723 },
   { keys: ["ajah", "sangotedo", "abraham adesanya"], label: "Ajah, Lagos", lat: 6.4667, lng: 3.5667 },
@@ -64,17 +78,52 @@ export function keywordMatch(address: string): GeoResult | null {
       const pattern = key.startsWith("\\b") ? new RegExp(key) : null;
       const hit = pattern ? pattern.test(haystack) : haystack.includes(key);
       if (hit) {
-        return { lat: place.lat, lng: place.lng, label: place.label, source: "keyword" };
+        return {
+          lat: place.lat,
+          lng: place.lng,
+          label: place.label,
+          source: "keyword",
+          // The gazetteer labels read "Area, State", so the tail is the state
+          state: place.state ?? place.label.split(",").pop()?.trim() ?? null,
+          lga: place.lga ?? null,
+        };
       }
     }
   }
   return null;
 }
 
+type GoogleComponent = { long_name: string; short_name: string; types: string[] };
+
 type GoogleGeocodeResponse = {
   status: string;
-  results?: { formatted_address: string; geometry: { location: { lat: number; lng: number } } }[];
+  results?: {
+    formatted_address: string;
+    address_components?: GoogleComponent[];
+    geometry: { location: { lat: number; lng: number } };
+  }[];
 };
+
+/**
+ * Google returns Nigerian states as administrative_area_level_1 and LGAs as
+ * administrative_area_level_2, so the service area comes free with the
+ * geocode. No static 774-row LGA table to maintain.
+ */
+function readArea(components: GoogleComponent[] | undefined): {
+  state: string | null;
+  lga: string | null;
+} {
+  if (!components) return { state: null, lga: null };
+  const pick = (type: string) =>
+    components.find((c) => c.types.includes(type))?.long_name ?? null;
+  const state = pick("administrative_area_level_1");
+  const lga = pick("administrative_area_level_2") ?? pick("locality");
+  return {
+    // Google writes "Lagos State"; Nigerians say "Lagos"
+    state: state ? state.replace(/\s+State$/i, "").trim() : null,
+    lga: lga ? lga.replace(/\s+(LGA|Local Government Area)$/i, "").trim() : null,
+  };
+}
 
 /**
  * Resolve a free-text Nigerian address to coordinates. Google first (biased
@@ -98,11 +147,13 @@ export async function geocodeAddress(address: string): Promise<GeoResult | null>
         const json = (await res.json()) as GoogleGeocodeResponse;
         const top = json.results?.[0];
         if (json.status === "OK" && top) {
+          const area = readArea(top.address_components);
           return {
             lat: top.geometry.location.lat,
             lng: top.geometry.location.lng,
             label: top.formatted_address,
             source: "google",
+            ...area,
           };
         }
       }

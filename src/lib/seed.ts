@@ -27,6 +27,7 @@ import { DEFAULT_CONFIG } from "./settings";
 import { logEvent } from "./ledger";
 import { assignLimit, runSalaryVerification } from "./onboarding";
 import { buildSchedule } from "./underwriting";
+import { priceFor } from "./catalog";
 import { createTransferRecipient } from "./paystack";
 
 // One-command demo readiness: POST /api/dev/seed. Deterministic data, and the
@@ -150,35 +151,6 @@ export async function runSeed(db: Db, origin: string): Promise<Record<string, un
     // fall back to conventional paths below
   }
 
-  // --- Catalog -------------------------------------------------------------
-  let unitCount = 0;
-  for (const p of CATALOG) {
-    const productId = uid();
-    await db.insert(products).values({
-      id: productId,
-      name: p.name,
-      description: p.description,
-      category: p.category,
-      imageKey: manifest[p.slug] ?? `/products/${p.slug}.jpg`,
-      active: true,
-      createdAt: now,
-      updatedAt: now,
-    });
-    for (let i = 0; i < p.units.length; i++) {
-      const u = p.units[i];
-      await db.insert(productUnits).values({
-        id: uid(),
-        productId,
-        unitLabel: u.label,
-        priceKobo: u.priceNaira * 100,
-        stockQty: u.stock,
-        active: true,
-        sortOrder: i,
-      });
-      unitCount++;
-    }
-  }
-
   // --- Admin ---------------------------------------------------------------
   const adminId = uid();
   await db.insert(users).values({
@@ -203,9 +175,22 @@ export async function runSeed(db: Db, origin: string): Promise<Record<string, un
       phone: "+2348000000002",
       businessName: "Mama Nkechi Provisions",
       address: "Shop 14, Mile 12 Market, Ketu, Lagos",
+      state: "Lagos",
+      lga: "Kosofe",
       lat: 6.6015,
       lng: 3.3969,
       geoLabel: "Mile 12, Lagos",
+      businessType: "Open market foodstuff stall",
+      yearsTrading: 11,
+      description:
+        "Bulk foodstuff trader at Mile 12, serving households and caterers across Ketu and Ojota since 2015.",
+      markupBps: 900,
+      slugs: [
+        "rice-foreign", "rice-ofada", "beans-oloyin", "garri-ijebu", "garri-yellow",
+        "semovita", "yam", "palm-oil", "vegetable-oil", "tomatoes", "tomato-paste",
+        "pepper", "onions", "crayfish", "egusi", "ogbono", "spaghetti", "indomie",
+        "sugar", "milo",
+      ],
       accountNumber: "0000000000",
       bankCode: "057",
       bankName: "Zenith Bank",
@@ -216,9 +201,20 @@ export async function runSeed(db: Db, origin: string): Promise<Record<string, un
       phone: "+2348000000003",
       businessName: "Alausa Food Hub",
       address: "22 Awolowo Way, Ikeja, Lagos",
+      state: "Lagos",
+      lga: "Ikeja",
       lat: 6.6018,
       lng: 3.3515,
       geoLabel: "Ikeja, Lagos",
+      businessType: "Provision store",
+      yearsTrading: 6,
+      description:
+        "Neighbourhood provision store off Awolowo Way, stocking dry goods and household staples for Alausa workers.",
+      markupBps: 1100,
+      slugs: [
+        "rice-foreign", "beans-oloyin", "semovita", "vegetable-oil", "tomato-paste",
+        "spaghetti", "indomie", "sugar", "milo", "eggs", "chicken",
+      ],
       accountNumber: "0000000000",
       bankCode: "057",
       bankName: "Zenith Bank",
@@ -229,9 +225,20 @@ export async function runSeed(db: Db, origin: string): Promise<Record<string, un
       phone: "+2348000000004",
       businessName: "Coker Foodstuff Stores",
       address: "8 Ojuelegba Road, Surulere, Lagos",
+      state: "Lagos",
+      lga: "Surulere",
       lat: 6.4969,
       lng: 3.3481,
       geoLabel: "Surulere, Lagos",
+      businessType: "Foodstuff shop",
+      yearsTrading: 8,
+      description:
+        "Family foodstuff shop on Ojuelegba Road known for well sorted beans, garri and soup ingredients.",
+      markupBps: 1000,
+      slugs: [
+        "rice-ofada", "beans-oloyin", "garri-ijebu", "garri-yellow", "palm-oil",
+        "pepper", "onions", "crayfish", "egusi", "ogbono", "stockfish", "titus-fish",
+      ],
       accountNumber: "0000000000",
       bankCode: "057",
       bankName: "Zenith Bank",
@@ -242,9 +249,20 @@ export async function runSeed(db: Db, origin: string): Promise<Record<string, un
       phone: "+2348000000005",
       businessName: "Lekki Fresh Market",
       address: "5 Admiralty Way, Lekki Phase 1, Lagos",
+      state: "Lagos",
+      lga: "Eti-Osa",
       lat: 6.4478,
       lng: 3.4723,
       geoLabel: "Lekki, Lagos",
+      businessType: "Fresh food grocer",
+      yearsTrading: 4,
+      description:
+        "Fresh produce and protein grocer on Admiralty Way, with cold storage for fish and poultry.",
+      markupBps: 1400,
+      slugs: [
+        "rice-foreign", "sweet-potato", "yam", "tomatoes", "pepper", "onions",
+        "titus-fish", "chicken", "eggs", "vegetable-oil",
+      ],
       accountNumber: "0000000000",
       bankCode: "057",
       bankName: "Zenith Bank",
@@ -255,9 +273,20 @@ export async function runSeed(db: Db, origin: string): Promise<Record<string, un
       phone: "+2348000000006",
       businessName: "Alaba Provisions Depot",
       address: "Block C, Alaba International Market, Ojo, Lagos",
+      state: "Lagos",
+      lga: "Ojo",
       lat: 6.4561,
       lng: 3.1858,
       geoLabel: "Alaba, Lagos",
+      businessType: "Wholesale depot",
+      yearsTrading: 14,
+      description:
+        "Wholesale depot supplying rice, oil and noodles by the bag and carton to shops across Ojo and Badagry.",
+      markupBps: 800,
+      slugs: [
+        "rice-foreign", "rice-ofada", "beans-oloyin", "garri-ijebu", "semovita",
+        "palm-oil", "vegetable-oil", "tomato-paste", "spaghetti", "indomie", "sugar",
+      ],
       accountNumber: "0000000000",
       bankCode: "057",
       bankName: "Zenith Bank",
@@ -266,6 +295,7 @@ export async function runSeed(db: Db, origin: string): Promise<Record<string, un
 
   let retailerId = "";
   let recipientCode: string | null = null;
+  const storeIds: { id: string; markupBps: number; slugs: string[] }[] = [];
   for (const store of STORES) {
     const id = uid();
     if (store.login) retailerId = id;
@@ -294,20 +324,110 @@ export async function runSeed(db: Db, origin: string): Promise<Record<string, un
     await db.insert(retailers).values({
       id,
       businessName: store.businessName,
+      ownerName: store.owner,
       contactPhone: store.phone,
       address: store.address,
+      state: store.state,
+      lga: store.lga,
       lat: store.lat,
       lng: store.lng,
       geoLabel: store.geoLabel,
+      businessType: store.businessType,
+      yearsTrading: store.yearsTrading,
+      description: store.description,
       settlementBankCode: store.bankCode,
       settlementBankName: store.bankName,
       settlementAccountNumber: store.accountNumber,
       settlementAccountName: store.businessName.toUpperCase(),
+      bankVerified: true,
       paystackRecipientCode: code,
+      status: "approved",
+      reviewedBy: "seed",
+      reviewedAt: now,
       active: true,
       isDemo: true,
       createdAt: now,
     });
+    storeIds.push({ id, markupBps: store.markupBps, slugs: store.slugs });
+  }
+
+  // --- Catalog, stocked per shop -------------------------------------------
+  // Each shop lists the lines it actually trades in, at its own cost price.
+  // The admin markup on top is what the customer sees, and what Foodline earns.
+  let unitCount = 0;
+  let productCount = 0;
+  for (const store of storeIds) {
+    for (const slug of store.slugs) {
+      const p = CATALOG.find((c) => c.slug === slug);
+      if (!p) continue;
+      const productId = uid();
+      await db.insert(products).values({
+        id: productId,
+        retailerId: store.id,
+        name: p.name,
+        description: p.description,
+        category: p.category,
+        imageKey: manifest[p.slug] ?? `/products/${p.slug}.jpg`,
+        status: "approved",
+        suggestedMarkupBps: store.markupBps,
+        markupBps: store.markupBps,
+        submittedBy: `retailer:${store.id}`,
+        reviewedBy: "seed",
+        reviewedAt: now,
+        active: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      productCount++;
+      for (let i = 0; i < p.units.length; i++) {
+        const u = p.units[i];
+        const costKobo = u.priceNaira * 100;
+        await db.insert(productUnits).values({
+          id: uid(),
+          productId,
+          unitLabel: u.label,
+          costKobo,
+          priceKobo: priceFor(costKobo, store.markupBps),
+          stockQty: u.stock,
+          active: true,
+          sortOrder: i,
+        });
+        unitCount++;
+      }
+    }
+  }
+
+  // A listing still awaiting an admin decision, so the approvals queue is
+  // never empty when a judge opens it
+  const pendingStore = storeIds[1] ?? storeIds[0];
+  if (pendingStore) {
+    const pendingId = uid();
+    await db.insert(products).values({
+      id: pendingId,
+      retailerId: pendingStore.id,
+      name: "Basmati Rice (5kg)",
+      description:
+        "Long grain aromatic basmati, ideal for fried rice and party jollof. New line, just arrived from our supplier.",
+      category: "Grains & Rice",
+      imageKey: manifest["rice-foreign"] ?? "/products/rice-foreign.jpg",
+      status: "pending",
+      suggestedMarkupBps: 1200,
+      submittedBy: `retailer:${pendingStore.id}`,
+      active: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(productUnits).values({
+      id: uid(),
+      productId: pendingId,
+      unitLabel: "5kg bag",
+      costKobo: 1_450_000,
+      priceKobo: priceFor(1_450_000, 1200),
+      stockQty: 40,
+      active: true,
+      sortOrder: 0,
+    });
+    unitCount++;
   }
 
   // --- Demo customer: Adaeze, via the real pipeline ------------------------
@@ -488,10 +608,13 @@ export async function runSeed(db: Db, origin: string): Promise<Record<string, un
     "active2",
     "repaid",
   ];
+  // Historical orders are all collected at the demo store, so stock them
+  // from that store's own shelf and keep the settlement maths consistent.
   const someUnits = await db
     .select({ unit: productUnits, product: products })
     .from(productUnits)
     .innerJoin(products, eq(productUnits.productId, products.id))
+    .where(eq(products.retailerId, retailerId))
     .limit(30);
 
   for (let i = 0; i < names.length; i++) {
@@ -556,6 +679,7 @@ export async function runSeed(db: Db, origin: string): Promise<Record<string, un
     const issuedAt = new Date(now.getTime() - daysAgo * 86_400_000);
     const pick = someUnits.slice((i * 4) % 20, ((i * 4) % 20) + 3);
     const total = pick.reduce((s, r) => s + r.unit.priceKobo, 0);
+    const pickCost = pick.reduce((s, r) => s + r.unit.costKobo, 0);
     const orderId = uid();
     await db.insert(orders).values({
       id: orderId,
@@ -578,15 +702,18 @@ export async function runSeed(db: Db, origin: string): Promise<Record<string, un
         productName: r.product.name,
         unitLabel: r.unit.unitLabel,
         unitPriceKobo: r.unit.priceKobo,
+        unitCostKobo: r.unit.costKobo,
         qty: 1,
         lineTotalKobo: r.unit.priceKobo,
+        lineCostKobo: r.unit.costKobo,
       });
     }
     await db.insert(settlements).values({
       id: uid(),
       orderId,
       retailerId,
-      amountKobo: total,
+      amountKobo: pickCost,
+      markupKobo: total - pickCost,
       status: "success",
       reference: `flstl-seed-${i}-${randomToken(6)}`,
       paystackTransferCode: `TRF_seed${i}${randomToken(4)}`,
@@ -663,8 +790,9 @@ export async function runSeed(db: Db, origin: string): Promise<Record<string, un
   }
 
   return {
-    products: CATALOG.length,
+    products: productCount,
     productUnits: unitCount,
+    stores: storeIds.length,
     demoCustomer: SEED_LOGINS.customer.email,
     demoRetailer: SEED_LOGINS.retailer.email,
     admin: SEED_LOGINS.admin.email,

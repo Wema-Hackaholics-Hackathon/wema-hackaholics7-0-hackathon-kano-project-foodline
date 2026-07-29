@@ -67,10 +67,22 @@ export async function placeOrder(
     .where(inArray(productUnits.id, unitIds));
 
   const byId = new Map(unitRows.map((r) => [r.unit.id, r]));
+
+  // A basket is collected in one trip, so it must come from one shop
+  const storeIds = [...new Set(unitRows.map((r) => r.product.retailerId).filter(Boolean))];
+  if (storeIds.length > 1) {
+    return {
+      ok: false,
+      error: "Your basket mixes items from different shops. Keep to one shop per order.",
+    };
+  }
+  const basketStoreId = (storeIds[0] as string | undefined) ?? null;
+
   let totalKobo = 0;
+  let costKobo = 0;
   for (const line of lines) {
     const row = byId.get(line.productUnitId);
-    if (!row || !row.unit.active || !row.product.active) {
+    if (!row || !row.unit.active || !row.product.active || row.product.status !== "approved") {
       return { ok: false, error: "An item in your basket is no longer available." };
     }
     if (line.qty < 1 || line.qty > 50) return { ok: false, error: "Invalid quantity." };
@@ -81,6 +93,7 @@ export async function placeOrder(
       };
     }
     totalKobo += row.unit.priceKobo * line.qty;
+    costKobo += row.unit.costKobo * line.qty;
   }
 
   const available = await availableCreditKobo(db, customerId);
@@ -112,16 +125,27 @@ export async function placeOrder(
   const code = voucherCode();
   const qrToken = randomToken(24);
 
-  // Validate the chosen pickup store rather than trusting the client
+  // Collection happens where the goods are: the shop that stocks the basket.
+  // An explicit choice is honoured only when it matches that shop.
   let pickupId: string | null = null;
-  if (pickupRetailerId) {
+  const candidate = basketStoreId ?? pickupRetailerId ?? null;
+  if (candidate) {
     const store = (
       await db
         .select({ id: retailers.id })
         .from(retailers)
-        .where(and(eq(retailers.id, pickupRetailerId), eq(retailers.active, true)))
+        .where(
+          and(
+            eq(retailers.id, candidate),
+            eq(retailers.active, true),
+            eq(retailers.status, "approved")
+          )
+        )
         .limit(1)
     )[0];
+    if (!store && basketStoreId) {
+      return { ok: false, error: "That shop is not accepting orders right now." };
+    }
     pickupId = store?.id ?? null;
   }
 
@@ -147,8 +171,10 @@ export async function placeOrder(
       productName: row.product.name,
       unitLabel: row.unit.unitLabel,
       unitPriceKobo: row.unit.priceKobo,
+      unitCostKobo: row.unit.costKobo,
       qty: line.qty,
       lineTotalKobo: row.unit.priceKobo * line.qty,
+      lineCostKobo: row.unit.costKobo * line.qty,
     });
     await db
       .update(productUnits)
@@ -186,6 +212,11 @@ export async function placeOrder(
     customerId,
     orderId,
     message: `Foodline Card ${code} issued for ${formatNaira(totalKobo)} (expires in ${config.cardExpiryHours}h)`,
+    data: {
+      pickupRetailerId: pickupId,
+      retailerShareKobo: costKobo,
+      foodlineMarkupKobo: totalKobo - costKobo,
+    },
   });
   await logEvent(db, {
     type: "loan_created",

@@ -1,6 +1,6 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { Db } from "@/db";
-import { orders, retailers, settlements } from "@/db/schema";
+import { orderItems, orders, retailers, settlements } from "@/db/schema";
 import { paystackReference, uid } from "./ids";
 import { formatNaira } from "./money";
 import { logEvent } from "./ledger";
@@ -33,7 +33,10 @@ export type ConfirmOutcome =
       state: "settled";
       orderId: string;
       voucherCode: string;
+      /** What the customer paid */
       amountKobo: number;
+      /** What the shop receives: the goods cost, without Foodline's markup */
+      retailerAmountKobo: number;
       settlementStatus: "success" | "pending";
       reference: string;
       retailerId: string;
@@ -151,11 +154,17 @@ async function finalizeIfReady(db: Db, order: OrderRow): Promise<ConfirmOutcome>
   if (!order.retailerConfirmedAt) return { ...base, state: "awaiting_retailer" };
   if (!order.customerConfirmedAt) return { ...base, state: "awaiting_customer" };
   if (order.status === "settled") {
+    const [prior] = await db
+      .select({ amountKobo: settlements.amountKobo, reference: settlements.reference })
+      .from(settlements)
+      .where(eq(settlements.orderId, order.id))
+      .limit(1);
     return {
       ...base,
       state: "settled",
+      retailerAmountKobo: prior?.amountKobo ?? order.totalKobo,
       settlementStatus: "success",
-      reference: "",
+      reference: prior?.reference ?? "",
       retailerId: order.redeemedByRetailerId ?? "",
     };
   }
@@ -177,6 +186,7 @@ async function finalizeIfReady(db: Db, order: OrderRow): Promise<ConfirmOutcome>
   return {
     ...base,
     state: "settled",
+    retailerAmountKobo: settled.retailerAmountKobo,
     settlementStatus: settled.status,
     reference: settled.reference,
     retailerId,
@@ -185,21 +195,35 @@ async function finalizeIfReady(db: Db, order: OrderRow): Promise<ConfirmOutcome>
 
 type RetailerRow = typeof retailers.$inferSelect;
 
-/** Instant Paystack payout to the retailer that honoured the card. */
+/**
+ * Instant Paystack payout to the retailer that honoured the card. The retailer
+ * receives their cost price for the goods; the difference between that and
+ * what the customer paid is Foodline's markup and stays with us.
+ */
 async function settleOrder(
   db: Db,
   order: OrderRow,
   retailer: RetailerRow
-): Promise<{ status: "success" | "pending"; reference: string }> {
+): Promise<{ status: "success" | "pending"; reference: string; retailerAmountKobo: number }> {
   const reference = paystackReference();
   const settlementId = uid();
   const now = new Date();
+
+  const [costRow] = await db
+    .select({ cost: sql<number>`coalesce(sum(${orderItems.lineCostKobo}), 0)` })
+    .from(orderItems)
+    .where(eq(orderItems.orderId, order.id));
+  // Legacy orders priced before the marketplace split have no cost recorded:
+  // pay them out in full rather than paying the shop nothing.
+  const retailerAmountKobo = Number(costRow?.cost ?? 0) || order.totalKobo;
+  const markupKobo = Math.max(0, order.totalKobo - retailerAmountKobo);
 
   await db.insert(settlements).values({
     id: settlementId,
     orderId: order.id,
     retailerId: retailer.id,
-    amountKobo: order.totalKobo,
+    amountKobo: retailerAmountKobo,
+    markupKobo,
     status: "pending",
     reference,
     createdAt: now,
@@ -208,8 +232,14 @@ async function settleOrder(
     type: "settlement_initiated",
     customerId: order.customerId,
     orderId: order.id,
-    message: `Both sides confirmed. Settlement of ${formatNaira(order.totalKobo)} to ${retailer.businessName} initiated (ref ${reference})`,
-    data: { settlementId, retailerId: retailer.id },
+    message: `Both sides confirmed. Settlement of ${formatNaira(retailerAmountKobo)} to ${retailer.businessName} initiated (ref ${reference}); Foodline markup ${formatNaira(markupKobo)}`,
+    data: {
+      settlementId,
+      retailerId: retailer.id,
+      customerPaidKobo: order.totalKobo,
+      retailerAmountKobo,
+      markupKobo,
+    },
   });
 
   try {
@@ -217,7 +247,7 @@ async function settleOrder(
       throw new PaystackError("Retailer has no Paystack recipient on file", 0);
     }
     const transfer = await initiateTransfer({
-      amountKobo: order.totalKobo,
+      amountKobo: retailerAmountKobo,
       recipientCode: retailer.paystackRecipientCode,
       reference,
       reason: `Foodline settlement ${order.voucherCode}`,
@@ -239,11 +269,11 @@ async function settleOrder(
       customerId: order.customerId,
       orderId: order.id,
       message: final
-        ? `Settlement of ${formatNaira(order.totalKobo)} to ${retailer.businessName} succeeded (${transfer.transfer_code})`
+        ? `Settlement of ${formatNaira(retailerAmountKobo)} to ${retailer.businessName} succeeded (${transfer.transfer_code})`
         : `Settlement queued with Paystack (status: ${transfer.status}); awaiting webhook confirmation`,
       data: { reference, transferCode: transfer.transfer_code, status: transfer.status },
     });
-    return { status: final ? "success" : "pending", reference };
+    return { status: final ? "success" : "pending", reference, retailerAmountKobo };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Transfer failed";
     if (retailer.isDemo) {
@@ -260,7 +290,7 @@ async function settleOrder(
         message: `Settlement simulated for demo retailer (Paystack unreachable: ${message})`,
         data: { reference },
       });
-      return { status: "success", reference };
+      return { status: "success", reference, retailerAmountKobo };
     }
     await db
       .update(settlements)
@@ -273,6 +303,6 @@ async function settleOrder(
       message: `Settlement to ${retailer.businessName} failed: ${message}. The goods were released; operations can retry from the ledger.`,
       data: { reference },
     });
-    return { status: "pending", reference };
+    return { status: "pending", reference, retailerAmountKobo };
   }
 }
