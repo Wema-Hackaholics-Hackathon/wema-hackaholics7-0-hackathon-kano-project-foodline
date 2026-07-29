@@ -4,7 +4,7 @@
 
 ## Team Members
 - Ibrahim Bako
-- Musbahu Abubakar
+- Misbahu Abubakar
 - Halima Mahmoud
 
 ## 🚀 Live Demo
