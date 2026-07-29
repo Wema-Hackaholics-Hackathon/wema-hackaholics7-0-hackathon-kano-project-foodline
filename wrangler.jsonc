@@ -25,7 +25,7 @@
   ],
   "r2_buckets": [
     {
-      "binding": "IMAGES",
+      "binding": "MEDIA",
       "bucket_name": "foodline-images"
     }
   ]
