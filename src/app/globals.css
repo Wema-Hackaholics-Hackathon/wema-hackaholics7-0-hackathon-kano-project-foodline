@@ -1,26 +1,165 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Foodline design system: "Market Warmth, Bank Discipline"
+   Warm terracotta + oat food palette anchored by near-black espresso.
+   Display: Fraunces. Body: Inter. Radii soft, shadows warm, CTAs pill. */
+
+@theme {
+  /* Brand */
+  --color-terra: #c2410c;
+  --color-terra-deep: #9a3412;
+  --color-terra-tint: #fcefe6;
+  --color-mango: #f5a524; /* dark-surface accent ONLY */
+  --color-espresso: #211512;
+  --color-espresso-2: #2b1b15;
+
+  /* Neutrals */
+  --color-oat: #faf6f0;
+  --color-wheat: #f3ede4;
+  --color-cocoa: #4a3f38;
+  --color-ash: #6b5e55;
+  --color-cream: #fff9f1;
+  --color-crust: #e7ddd1;
+
+  /* Semantic */
+  --color-good: #1e7a44;
+  --color-good-tint: #e6f4ea;
+  --color-warn: #b45309;
+  --color-warn-tint: #fdf3e1;
+  --color-bad: #ba1b1b;
+  --color-bad-tint: #fbeaea;
+  --color-note: #175e63;
+  --color-note-tint: #e4f1f1;
+
+  /* Type */
+  --font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  --font-sans: var(--font-inter), -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
+
+  /* Radii */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+
+  /* Warm shadows (espresso-derived, never gray) */
+  --shadow-1: 0 1px 2px rgba(33, 21, 18, 0.05), 0 2px 8px rgba(33, 21, 18, 0.06);
+  --shadow-2: 0 4px 12px rgba(33, 21, 18, 0.08), 0 12px 32px rgba(33, 21, 18, 0.1);
+  --shadow-card: 0 16px 40px -12px rgba(154, 52, 18, 0.35);
+
+  --ease-fl: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-oat text-espresso font-sans antialiased;
+    font-feature-settings: "cv11";
+  }
+  ::selection {
+    background: var(--color-terra-tint);
+    color: var(--color-terra-deep);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-terra);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@utility font-display {
+  font-family: var(--font-display);
+  font-variation-settings: "opsz" 72, "SOFT" 60;
+}
+
+@utility tnum {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* Foodline Card woven texture: 45deg cream weave at whisper opacity */
+@utility card-weave {
+  background-image: repeating-linear-gradient(
+      45deg,
+      rgba(255, 249, 241, 0.05) 0 1px,
+      transparent 1px 8px
+    ),
+    repeating-linear-gradient(-45deg, rgba(255, 249, 241, 0.04) 0 1px, transparent 1px 8px);
+}
+
+/* Awning stripe: market-stall two-tone top border for partner surfaces */
+@utility awning {
+  background-image: linear-gradient(
+    90deg,
+    var(--color-terra) 0 16px,
+    var(--color-mango) 16px 32px
+  );
+  background-size: 32px 4px;
+  background-repeat: repeat-x;
+}
+
+@layer utilities {
+  .animate-rise {
+    animation: fl-rise 0.35s var(--ease-fl) both;
+  }
+  .animate-pop {
+    animation: fl-pop 0.45s var(--ease-fl) both;
+  }
+  .animate-shimmer {
+    animation: fl-shimmer 1.4s linear infinite;
+    background: linear-gradient(
+      100deg,
+      var(--color-wheat) 40%,
+      #efe6d9 50%,
+      var(--color-wheat) 60%
+    );
+    background-size: 200% 100%;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .animate-rise,
+    .animate-pop,
+    .animate-shimmer {
+      animation: none;
+    }
+  }
+}
+
+@keyframes fl-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fl-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  60% {
+    transform: scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fl-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
 }
