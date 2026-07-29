@@ -111,7 +111,7 @@ export function PinnedCta({
   return (
     <div
       className={cn(
-        "sticky bottom-0 mt-8 -mx-5 px-5 pt-6 pb-[calc(env(safe-area-inset-bottom)+16px)]",
+        "sticky bottom-0 mt-auto -mx-5 px-5 pt-6 pb-[calc(env(safe-area-inset-bottom)+16px)]",
         on === "dark"
           ? "bg-gradient-to-t from-espresso via-espresso/95 to-transparent"
           : "bg-gradient-to-t from-oat via-oat/95 to-transparent",
