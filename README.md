@@ -14,7 +14,7 @@
 - **Judge Access:** open [https://foodline.com.ng/login](https://foodline.com.ng/login) and expand "Judge access" for one-tap demo credentials (customer, retailer, admin)
 
 ## 🎯 The Problem
-What happens when your salary is guaranteed—but food in your children cannot eat food because kitchen is empty?
+What happens when your salary is guaranteed, but food in your children cannot eat food because kitchen is empty?
 
 Across Nigeria, hardworking salary earners still reach the final days before payday unable to buy enough food for their families. They are employed, financially visible and capable of repaymen, yet traditional credit rarely helps them purchase the one thing they cannot postpone: food.
 
