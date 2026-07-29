@@ -73,7 +73,7 @@ export async function cacheTransactions(
   if (txs.length === 0) return 0;
   await db.delete(bankTransactions).where(eq(bankTransactions.customerId, customerId));
   // D1 bind-parameter budget: insert in chunks
-  const chunk = 20;
+  const chunk = 10;
   for (let i = 0; i < txs.length; i += chunk) {
     await db.insert(bankTransactions).values(
       txs.slice(i, i + chunk).map((t) => ({

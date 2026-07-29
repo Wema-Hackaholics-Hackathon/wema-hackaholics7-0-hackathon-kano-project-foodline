@@ -340,8 +340,8 @@ export async function runSeed(db: Db, origin: string): Promise<Record<string, un
       });
     }
   }
-  for (let i = 0; i < txRows.length; i += 15) {
-    await db.insert(bankTransactions).values(txRows.slice(i, i + 15));
+  for (let i = 0; i < txRows.length; i += 10) {
+    await db.insert(bankTransactions).values(txRows.slice(i, i + 10));
   }
 
   // Real pipeline: detection -> confirm -> limit

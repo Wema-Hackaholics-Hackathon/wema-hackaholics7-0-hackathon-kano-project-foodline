@@ -99,8 +99,8 @@ export async function linkDemoBankAccount(
       });
     }
   }
-  for (let i = 0; i < rows.length; i += 15) {
-    await db.insert(bankTransactions).values(rows.slice(i, i + 15));
+  for (let i = 0; i < rows.length; i += 10) {
+    await db.insert(bankTransactions).values(rows.slice(i, i + 10));
   }
 
   await db
