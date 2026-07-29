@@ -1,11 +1,9 @@
 # [Project Title]
 
 ## Team Members
-- [Name 1]
-- [Name 2]
-- [Name 3]
-- [Name 4]
-- [Name 5]
+- Ibrahim Bako
+- Musbahu Abubakar
+- Halima Mahmoud 
 
 ---
 
