@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getDb } from "@/db";
 import { orderItems, orders, retailers, users } from "@/db/schema";
 import { apiUser } from "@/lib/session";
-import { redeemAndSettle } from "@/lib/settlement";
+import { confirmByRetailer } from "@/lib/settlement";
 
 // ---------------------------------------------------------------------------
 // Types shared with the client flow
@@ -36,12 +36,20 @@ export type LookupResult =
 export type ConfirmResult =
   | {
       ok: true;
+      state: "settled";
       amountKobo: number;
       reference: string;
       settlementStatus: "success" | "pending";
       bankName: string;
       accountLast4: string;
       atMs: number;
+    }
+  | {
+      /** Retailer has confirmed; money moves once the customer confirms too */
+      ok: true;
+      state: "awaiting_customer";
+      amountKobo: number;
+      voucherCode: string;
     }
   | { ok: false; message: string };
 
@@ -154,7 +162,10 @@ export async function lookup(codeOrToken: string): Promise<LookupResult> {
   };
 }
 
-/** Redeem the card and settle the retailer instantly via the engine. */
+/**
+ * The retailer's half of the handover. Settlement only fires once the
+ * customer has confirmed collection too.
+ */
 export async function confirmRedeem(codeOrToken: string): Promise<ConfirmResult> {
   const user = await apiUser("retailer");
   if (!user) {
@@ -162,21 +173,32 @@ export async function confirmRedeem(codeOrToken: string): Promise<ConfirmResult>
   }
 
   const db = getDb();
-  const result = await redeemAndSettle(db, {
+  const result = await confirmByRetailer(db, {
     codeOrToken: canonicalize(codeOrToken),
     retailerId: user.id,
   });
   if (!result.ok) return { ok: false, message: result.error };
 
+  revalidatePath("/retailer");
+  revalidatePath("/retailer/orders");
+  revalidatePath("/retailer/history");
+
+  if (result.state !== "settled") {
+    return {
+      ok: true,
+      state: "awaiting_customer",
+      amountKobo: result.amountKobo,
+      voucherCode: result.voucherCode,
+    };
+  }
+
   const retailer = (
     await db.select().from(retailers).where(eq(retailers.id, user.id)).limit(1)
   )[0];
 
-  revalidatePath("/retailer");
-  revalidatePath("/retailer/history");
-
   return {
     ok: true,
+    state: "settled",
     amountKobo: result.amountKobo,
     reference: result.reference,
     settlementStatus: result.settlementStatus,
@@ -184,4 +206,11 @@ export async function confirmRedeem(codeOrToken: string): Promise<ConfirmResult>
     accountLast4: (retailer?.settlementAccountNumber ?? "").slice(-4),
     atMs: Date.now(),
   };
+}
+
+/** Poll target: has the customer confirmed since we showed the waiting state? */
+export async function checkHandover(
+  codeOrToken: string
+): Promise<ConfirmResult> {
+  return confirmRedeem(codeOrToken);
 }

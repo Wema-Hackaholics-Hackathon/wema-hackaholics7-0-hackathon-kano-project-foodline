@@ -18,6 +18,7 @@ import {
   voucherGroups,
 } from "../../format";
 import { CardQr } from "./card-qr";
+import { CollectPanel } from "./collect-panel";
 import { ExpiryCountdown } from "./countdown";
 
 export const metadata: Metadata = { title: "Your Foodline Card" };
@@ -44,6 +45,18 @@ export default async function CardPage({
           .select({ name: retailers.businessName })
           .from(retailers)
           .where(eq(retailers.id, order.redeemedByRetailerId))
+          .limit(1)
+      )[0]?.name ?? null;
+  }
+
+  let pickupName: string | null = null;
+  if (order.pickupRetailerId) {
+    pickupName =
+      (
+        await db
+          .select({ name: retailers.businessName })
+          .from(retailers)
+          .where(eq(retailers.id, order.pickupRetailerId))
           .limit(1)
       )[0]?.name ?? null;
   }
@@ -153,8 +166,19 @@ export default async function CardPage({
         </div>
         <p className="mt-3 text-[13px] text-ash">
           Issued {formatDateTime(order.issuedAt.getTime())}
+          {pickupName ? `, for collection at ${pickupName}` : ""}
         </p>
       </Card>
+
+      {live && (
+        <CollectPanel
+          orderId={order.id}
+          amountKobo={order.totalKobo}
+          storeName={pickupName ?? retailerName}
+          retailerConfirmed={Boolean(order.retailerConfirmedAt)}
+          customerConfirmed={Boolean(order.customerConfirmedAt)}
+        />
+      )}
 
       {honoured && (
         <Notice tone="good" className="mt-4">

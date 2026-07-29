@@ -9,6 +9,7 @@ import {
   orders,
   productUnits,
   products,
+  retailers,
 } from "@/db/schema";
 import { uid, voucherCode, randomToken } from "./ids";
 import { formatNaira } from "./money";
@@ -27,7 +28,8 @@ export async function placeOrder(
   db: Db,
   customerId: string,
   lines: CartLine[],
-  installmentsCount: number
+  installmentsCount: number,
+  pickupRetailerId?: string | null
 ): Promise<CheckoutResult> {
   if (lines.length === 0) return { ok: false, error: "Your basket is empty." };
   const config = await getConfig(db);
@@ -110,6 +112,19 @@ export async function placeOrder(
   const code = voucherCode();
   const qrToken = randomToken(24);
 
+  // Validate the chosen pickup store rather than trusting the client
+  let pickupId: string | null = null;
+  if (pickupRetailerId) {
+    const store = (
+      await db
+        .select({ id: retailers.id })
+        .from(retailers)
+        .where(and(eq(retailers.id, pickupRetailerId), eq(retailers.active, true)))
+        .limit(1)
+    )[0];
+    pickupId = store?.id ?? null;
+  }
+
   await db.insert(orders).values({
     id: orderId,
     customerId,
@@ -119,6 +134,7 @@ export async function placeOrder(
     qrToken,
     issuedAt: now,
     expiresAt: new Date(now.getTime() + config.cardExpiryHours * 3_600_000),
+    pickupRetailerId: pickupId,
   });
 
   for (const line of lines) {

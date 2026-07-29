@@ -191,42 +191,124 @@ export async function runSeed(db: Db, origin: string): Promise<Record<string, un
     createdAt: now,
   });
 
-  // --- Demo retailer -------------------------------------------------------
-  const retailerId = uid();
-  await db.insert(users).values({
-    id: retailerId,
-    role: "retailer",
-    name: "Nkechi Eze",
-    email: SEED_LOGINS.retailer.email,
-    phone: "+2348000000002",
-    passwordHash: HASHES.retailer,
-    createdAt: now,
-  });
-  // Paystack test recipient; harmless if it fails (settlement simulates for demo retailers)
-  let recipientCode: string | null = null;
-  try {
-    recipientCode = await createTransferRecipient({
-      name: "Mama Nkechi Provisions",
+  // --- Partner store network ----------------------------------------------
+  // Coordinates are pre-resolved so a fresh seed never waits on Google, and
+  // so the nearest-store ranking is identical on every deploy. The signed-in
+  // demo retailer sits closest to the demo customer's home address.
+  const STORES = [
+    {
+      login: true,
+      owner: "Nkechi Eze",
+      email: SEED_LOGINS.retailer.email,
+      phone: "+2348000000002",
+      businessName: "Mama Nkechi Provisions",
+      address: "Shop 14, Mile 12 Market, Ketu, Lagos",
+      lat: 6.6015,
+      lng: 3.3969,
+      geoLabel: "Mile 12, Lagos",
       accountNumber: "0000000000",
       bankCode: "057",
+      bankName: "Zenith Bank",
+    },
+    {
+      owner: "Segun Adebayo",
+      email: "ikeja@demo.foodline.com.ng",
+      phone: "+2348000000003",
+      businessName: "Alausa Food Hub",
+      address: "22 Awolowo Way, Ikeja, Lagos",
+      lat: 6.6018,
+      lng: 3.3515,
+      geoLabel: "Ikeja, Lagos",
+      accountNumber: "0000000000",
+      bankCode: "057",
+      bankName: "Zenith Bank",
+    },
+    {
+      owner: "Bisi Coker",
+      email: "surulere@demo.foodline.com.ng",
+      phone: "+2348000000004",
+      businessName: "Coker Foodstuff Stores",
+      address: "8 Ojuelegba Road, Surulere, Lagos",
+      lat: 6.4969,
+      lng: 3.3481,
+      geoLabel: "Surulere, Lagos",
+      accountNumber: "0000000000",
+      bankCode: "057",
+      bankName: "Zenith Bank",
+    },
+    {
+      owner: "Ifeoma Nwachukwu",
+      email: "lekki@demo.foodline.com.ng",
+      phone: "+2348000000005",
+      businessName: "Lekki Fresh Market",
+      address: "5 Admiralty Way, Lekki Phase 1, Lagos",
+      lat: 6.4478,
+      lng: 3.4723,
+      geoLabel: "Lekki, Lagos",
+      accountNumber: "0000000000",
+      bankCode: "057",
+      bankName: "Zenith Bank",
+    },
+    {
+      owner: "Musa Bello",
+      email: "alaba@demo.foodline.com.ng",
+      phone: "+2348000000006",
+      businessName: "Alaba Provisions Depot",
+      address: "Block C, Alaba International Market, Ojo, Lagos",
+      lat: 6.4561,
+      lng: 3.1858,
+      geoLabel: "Alaba, Lagos",
+      accountNumber: "0000000000",
+      bankCode: "057",
+      bankName: "Zenith Bank",
+    },
+  ];
+
+  let retailerId = "";
+  let recipientCode: string | null = null;
+  for (const store of STORES) {
+    const id = uid();
+    if (store.login) retailerId = id;
+    await db.insert(users).values({
+      id,
+      role: "retailer",
+      name: store.owner,
+      email: store.email,
+      phone: store.phone,
+      passwordHash: HASHES.retailer,
+      createdAt: now,
     });
-  } catch {
-    recipientCode = null;
+    // Paystack test recipient; harmless if it fails, since demo retailers
+    // fall back to a simulated settlement rather than stalling the pitch
+    let code: string | null = null;
+    try {
+      code = await createTransferRecipient({
+        name: store.businessName,
+        accountNumber: store.accountNumber,
+        bankCode: store.bankCode,
+      });
+    } catch {
+      code = null;
+    }
+    if (store.login) recipientCode = code;
+    await db.insert(retailers).values({
+      id,
+      businessName: store.businessName,
+      contactPhone: store.phone,
+      address: store.address,
+      lat: store.lat,
+      lng: store.lng,
+      geoLabel: store.geoLabel,
+      settlementBankCode: store.bankCode,
+      settlementBankName: store.bankName,
+      settlementAccountNumber: store.accountNumber,
+      settlementAccountName: store.businessName.toUpperCase(),
+      paystackRecipientCode: code,
+      active: true,
+      isDemo: true,
+      createdAt: now,
+    });
   }
-  await db.insert(retailers).values({
-    id: retailerId,
-    businessName: "Mama Nkechi Provisions",
-    contactPhone: "+2348000000002",
-    address: "Shop 14, Mile 12 Market, Lagos",
-    settlementBankCode: "057",
-    settlementBankName: "Zenith Bank",
-    settlementAccountNumber: "0000000000",
-    settlementAccountName: "MAMA NKECHI PROVISIONS",
-    paystackRecipientCode: recipientCode,
-    active: true,
-    isDemo: true,
-    createdAt: now,
-  });
 
   // --- Demo customer: Adaeze, via the real pipeline ------------------------
   const payDay = 26;
@@ -247,7 +329,11 @@ export async function runSeed(db: Db, origin: string): Promise<Record<string, un
     dob: "1994-03-14",
     employerName: "Sterling Consult Ltd",
     workEmail: "adaeze.okafor@sterlingconsult.ng",
-    address: "12 Adeola Odeku Street, Victoria Island, Lagos",
+    address: "15 Demurin Street, Ketu, Lagos",
+    // Pre-resolved so the checkout store picker never waits on geocoding
+    lat: 6.5883,
+    lng: 3.3806,
+    geoLabel: "Ketu, Lagos",
     stage: "verify_salary",
     monoAccountId: null,
     accountName: "ADAEZE CHIAMAKA OKAFOR",

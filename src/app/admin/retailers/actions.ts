@@ -9,6 +9,7 @@ import { apiUser } from "@/lib/session";
 import { uid } from "@/lib/ids";
 import { hashPassword } from "@/lib/password";
 import { logEvent } from "@/lib/ledger";
+import { geocodeAddress } from "@/lib/geo";
 import {
   createTransferRecipient,
   listBanks,
@@ -164,11 +165,17 @@ export async function createRetailer(
     recipientError = err instanceof Error ? err.message : "Paystack recipient could not be created";
   }
 
+  // Geocode at create time so checkout never waits on Google
+  const geo = address ? await geocodeAddress(address) : null;
+
   await db.insert(retailers).values({
     id,
     businessName,
     contactPhone: contactPhone || null,
     address: address || null,
+    lat: geo?.lat ?? null,
+    lng: geo?.lng ?? null,
+    geoLabel: geo?.label ?? null,
     settlementBankCode: bankCode,
     settlementBankName: bankName,
     settlementAccountNumber: accountNumber,

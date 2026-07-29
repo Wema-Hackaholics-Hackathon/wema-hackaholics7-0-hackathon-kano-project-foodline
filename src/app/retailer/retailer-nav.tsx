@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ReceiptText, ScanLine } from "lucide-react";
+import { Inbox, LayoutDashboard, ReceiptText, ScanLine } from "lucide-react";
 import { cn } from "@/components/ui";
 
 const TABS = [
   { href: "/retailer", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  { href: "/retailer/orders", label: "Orders", icon: Inbox, exact: false },
   { href: "/retailer/redeem", label: "Accept card", icon: ScanLine, exact: false },
   { href: "/retailer/history", label: "History", icon: ReceiptText, exact: false },
 ] as const;
@@ -44,7 +45,7 @@ export function RetailerNav({ variant }: { variant: "top" | "bottom" }) {
       aria-label="Retailer sections"
       className="fixed inset-x-0 bottom-0 z-20 border-t border-crust bg-white pb-[env(safe-area-inset-bottom)] md:hidden"
     >
-      <div className="grid grid-cols-3">
+      <div className="grid grid-cols-4">
         {TABS.map((tab) => {
           const active = isActive(tab);
           const Icon = tab.icon;

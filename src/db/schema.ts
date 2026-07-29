@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 // All monetary values are integer kobo (NGN lowest denomination), matching
 // Mono and Paystack API conventions. Format for display with lib/money.ts.
@@ -50,6 +50,11 @@ export const customers = sqliteTable("customers", {
   employerName: text("employer_name").notNull(),
   workEmail: text("work_email").notNull(),
   address: text("address"),
+  // Geocoded home address, used to recommend the nearest pickup store.
+  // Cached so the demo never depends on a live geocoding call.
+  lat: real("lat"),
+  lng: real("lng"),
+  geoLabel: text("geo_label"),
   // Onboarding progression
   stage: text("stage", {
     enum: [
@@ -184,6 +189,9 @@ export const retailers = sqliteTable("retailers", {
   businessName: text("business_name").notNull(),
   contactPhone: text("contact_phone"),
   address: text("address"),
+  lat: real("lat"),
+  lng: real("lng"),
+  geoLabel: text("geo_label"),
   settlementBankCode: text("settlement_bank_code").notNull(),
   settlementBankName: text("settlement_bank_name").notNull(),
   settlementAccountNumber: text("settlement_account_number").notNull(),
@@ -218,12 +226,21 @@ export const orders = sqliteTable(
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
     redeemedAt: integer("redeemed_at", { mode: "timestamp_ms" }),
     redeemedByRetailerId: text("redeemed_by_retailer_id").references(() => retailers.id),
+    // The store the customer chose at checkout. The card is pushed to this
+    // retailer's queue; it is a recommendation, not a lock, so another
+    // partner store can still honour the card.
+    pickupRetailerId: text("pickup_retailer_id").references(() => retailers.id),
+    // Handover requires BOTH sides to confirm. Settlement fires only when
+    // both timestamps are set, so a leaked code alone cannot move money.
+    customerConfirmedAt: integer("customer_confirmed_at", { mode: "timestamp_ms" }),
+    retailerConfirmedAt: integer("retailer_confirmed_at", { mode: "timestamp_ms" }),
   },
   (t) => [
     uniqueIndex("orders_voucher_idx").on(t.voucherCode),
     uniqueIndex("orders_qr_idx").on(t.qrToken),
     index("orders_customer_idx").on(t.customerId),
     index("orders_status_idx").on(t.status),
+    index("orders_pickup_idx").on(t.pickupRetailerId, t.status),
   ]
 );
 

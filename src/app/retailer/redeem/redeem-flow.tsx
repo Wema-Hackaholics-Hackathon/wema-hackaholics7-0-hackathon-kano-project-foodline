@@ -15,6 +15,7 @@ import { Button, Card, Money, Notice, Pill, cn, inputCls } from "@/components/ui
 import { formatNaira } from "@/lib/money";
 import { formatDateTime } from "@/lib/dates";
 import {
+  checkHandover,
   confirmRedeem,
   lookup,
   type ConfirmResult,
@@ -53,6 +54,8 @@ export function RedeemFlow({ initialToken }: { initialToken?: string }) {
   // Remount key so "Accept another card" restarts the camera cleanly.
   const [scanSession, setScanSession] = useState(0);
   const autoSubmitted = useRef(false);
+  // Canonical code of the card being handed over, for the confirmation poll
+  const lastCode = useRef("");
 
   const runLookup = useCallback(async (value: string) => {
     setPhase({ name: "looking" });
@@ -69,6 +72,7 @@ export function RedeemFlow({ initialToken }: { initialToken?: string }) {
 
   const runConfirm = useCallback(async (card: LookupOk) => {
     setPhase({ name: "confirming", card });
+    lastCode.current = card.canonical;
     let result: ConfirmResult;
     try {
       result = await confirmRedeem(card.canonical);
@@ -98,6 +102,16 @@ export function RedeemFlow({ initialToken }: { initialToken?: string }) {
   const codeReady = code.replace(/^FL-?/, "").length >= 6;
 
   if (phase.name === "done") {
+    if (phase.receipt.state === "awaiting_customer") {
+      return (
+        <AwaitingCustomerScreen
+          receipt={phase.receipt}
+          code={lastCode.current}
+          onAgain={reset}
+          onSettled={(r) => setPhase({ name: "done", receipt: r })}
+        />
+      );
+    }
     return <SuccessScreen receipt={phase.receipt} onAgain={reset} />;
   }
 
@@ -357,7 +371,76 @@ function InvalidScreen({
 // Settlement confirmation: the money-arriving moment
 // ---------------------------------------------------------------------------
 
-function SuccessScreen({ receipt, onAgain }: { receipt: ConfirmOk; onAgain: () => void }) {
+/**
+ * Retailer has confirmed, the customer has not yet. Money moves only when
+ * both sides agree, so we hold here and poll for their tap.
+ */
+function AwaitingCustomerScreen({
+  receipt,
+  onAgain,
+  onSettled,
+  code,
+}: {
+  receipt: Extract<ConfirmOk, { state: "awaiting_customer" }>;
+  onAgain: () => void;
+  onSettled: (r: ConfirmOk) => void;
+  code: string;
+}) {
+  useEffect(() => {
+    let alive = true;
+    const timer = setInterval(async () => {
+      try {
+        const next = await checkHandover(code);
+        if (alive && next.ok && next.state === "settled") onSettled(next);
+      } catch {
+        // keep polling; the retailer can also refresh manually
+      }
+    }, 4000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [code, onSettled]);
+
+  return (
+    <div className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center py-8 text-center">
+      <div className="animate-pop flex size-24 items-center justify-center rounded-full bg-warn-tint text-warn">
+        <Clock className="size-12" strokeWidth={1.75} aria-hidden />
+      </div>
+      <h1 className="animate-rise mt-6 font-display text-3xl leading-tight text-espresso">
+        Order confirmed on your side
+      </h1>
+      <p className="mt-3 text-sm leading-relaxed text-cocoa">
+        Ask {receipt.voucherCode ? "the customer" : "them"} to tap{" "}
+        <span className="font-medium text-espresso">Confirm collection</span> on their Foodline
+        Card. The moment they do,{" "}
+        <span className="tnum font-medium text-espresso">{formatNaira(receipt.amountKobo)}</span>{" "}
+        is sent to your settlement account.
+      </p>
+      <div className="mt-5 flex items-center gap-2 text-[13px] text-ash">
+        <Loader2 className="size-4 animate-spin" aria-hidden />
+        Waiting for the customer
+      </div>
+      <Notice tone="note" className="mt-6 w-full max-w-sm text-left">
+        This two-way confirmation is what protects you both. A stolen card code alone can never
+        move money.
+      </Notice>
+      <div className="mt-8 flex w-full max-w-sm flex-col gap-3">
+        <Button size="lg" variant="secondary" className="w-full" onClick={onAgain}>
+          Accept another card
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function SuccessScreen({
+  receipt,
+  onAgain,
+}: {
+  receipt: Extract<ConfirmOk, { state: "settled" }>;
+  onAgain: () => void;
+}) {
   const [copied, setCopied] = useState(false);
 
   const copyReference = async () => {
