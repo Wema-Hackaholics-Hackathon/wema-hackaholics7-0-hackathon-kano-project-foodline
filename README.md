@@ -9,7 +9,7 @@
 
 ## 🚀 Live Demo
 
-*   **Live Application:** [Link to your deployed Vercel/Netlify/Render URL]
+*   **Live Application:** [https://www.foodline.com.ng]
 *   **Backend API:** [Link to your live backend API endpoint URL, if separate]
 *   **Recorded Demo:** [Link to your recorded demo explaining how your solution works using Loom].
 
