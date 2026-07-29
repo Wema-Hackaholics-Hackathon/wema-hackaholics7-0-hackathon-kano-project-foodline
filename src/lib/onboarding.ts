@@ -194,6 +194,8 @@ export type MandateSetupResult = {
   transferDestinations: unknown;
   amountCapKobo: number;
   autoApproved: boolean;
+  /** set when Mono declined mandate creation and demo mode absorbed it */
+  demoFallback?: boolean;
 };
 
 /** Create the standing variable e-mandate that funds every future purchase */
@@ -229,16 +231,46 @@ export async function createStandingMandate(db: Db, customerId: string): Promise
 
   const terms = mandateTerms(customer.creditLimitKobo, config);
   const reference = monoReference("fmd");
-  const mandate = await createMandate({
-    customerId: monoCustomerId,
-    amountCapKobo: terms.amountCapKobo,
-    reference,
-    accountNumber: customer.accountNumber,
-    bankCode: customer.bankCode!,
-    description: "Foodline foodstuff credit line repayments",
-    startDate: terms.startDate,
-    endDate: terms.endDate,
-  });
+  let mandate;
+  try {
+    mandate = await createMandate({
+      customerId: monoCustomerId,
+      amountCapKobo: terms.amountCapKobo,
+      reference,
+      accountNumber: customer.accountNumber,
+      bankCode: customer.bankCode!,
+      description: "Foodline foodstuff credit line repayments",
+      startDate: terms.startDate,
+      endDate: terms.endDate,
+    });
+  } catch (err) {
+    // Mono sandbox refuses Direct Debit until business compliance is
+    // completed on the dashboard. With demo mode on, absorb that into a
+    // simulated mandate so onboarding never dead-ends; the ledger records
+    // the truth.
+    if (config.demoMode) {
+      const { createDemoMandate } = await import("./demo");
+      await db
+        .update(customers)
+        .set({ isDemo: true, updatedAt: new Date() })
+        .where(eq(customers.id, customerId));
+      const demo = await createDemoMandate(db, customerId);
+      await logEvent(db, {
+        type: "mandate_created",
+        customerId,
+        message: `Mono declined mandate creation (${err instanceof Error ? err.message : "unknown error"}); demo mode simulated an approved mandate instead`,
+      });
+      return {
+        mandateId: demo.mandateId,
+        status: "approved",
+        transferDestinations: null,
+        amountCapKobo: Math.round(customer.creditLimitKobo * config.mandateCapMultiplier),
+        autoApproved: true,
+        demoFallback: true,
+      };
+    }
+    throw err;
+  }
 
   const autoApproved = mandate.status === "approved" || mandate.approved === true;
   const now = new Date();

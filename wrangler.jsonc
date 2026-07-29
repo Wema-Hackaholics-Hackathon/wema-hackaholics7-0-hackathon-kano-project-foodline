@@ -11,6 +11,10 @@
   "services": [
     { "binding": "WORKER_SELF_REFERENCE", "service": "foodline" }
   ],
+  "routes": [
+    { "pattern": "foodline.com.ng", "custom_domain": true },
+    { "pattern": "www.foodline.com.ng", "custom_domain": true }
+  ],
   "observability": {
     "enabled": true
   },

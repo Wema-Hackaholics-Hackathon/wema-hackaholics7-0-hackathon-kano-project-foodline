@@ -208,7 +208,7 @@ export async function runSeed(db: Db, origin: string): Promise<Record<string, un
     recipientCode = await createTransferRecipient({
       name: "Mama Nkechi Provisions",
       accountNumber: "0000000000",
-      bankCode: "011",
+      bankCode: "057",
     });
   } catch {
     recipientCode = null;
@@ -218,8 +218,8 @@ export async function runSeed(db: Db, origin: string): Promise<Record<string, un
     businessName: "Mama Nkechi Provisions",
     contactPhone: "+2348000000002",
     address: "Shop 14, Mile 12 Market, Lagos",
-    settlementBankCode: "011",
-    settlementBankName: "First Bank of Nigeria",
+    settlementBankCode: "057",
+    settlementBankName: "Zenith Bank",
     settlementAccountNumber: "0000000000",
     settlementAccountName: "MAMA NKECHI PROVISIONS",
     paystackRecipientCode: recipientCode,
