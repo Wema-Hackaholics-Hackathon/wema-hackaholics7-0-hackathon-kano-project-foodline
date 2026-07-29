@@ -3,15 +3,29 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { LayoutDashboard, ScrollText, PlayCircle, Menu, X } from "lucide-react";
+import {
+  LayoutDashboard,
+  Package,
+  Store,
+  Banknote,
+  SlidersHorizontal,
+  ScrollText,
+  PlayCircle,
+  Menu,
+  X,
+} from "lucide-react";
 import { Logo } from "@/components/logo";
 import { cn } from "@/components/ui";
 import { logout } from "@/lib/auth-actions";
 
 const ITEMS = [
-  { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/admin/ledger", label: "Audit ledger", icon: ScrollText },
-  { href: "/admin/demo", label: "Demo panel", icon: PlayCircle },
+  { href: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  { href: "/admin/products", label: "Catalog", icon: Package, exact: false },
+  { href: "/admin/retailers", label: "Partner stores", icon: Store, exact: false },
+  { href: "/admin/loans", label: "Loan book", icon: Banknote, exact: false },
+  { href: "/admin/lending", label: "Lending config", icon: SlidersHorizontal, exact: false },
+  { href: "/admin/ledger", label: "Audit ledger", icon: ScrollText, exact: false },
+  { href: "/admin/demo", label: "Demo panel", icon: PlayCircle, exact: false },
 ];
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
@@ -19,7 +33,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <nav className="space-y-1">
       {ITEMS.map((item) => {
-        const active = pathname === item.href;
+        const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
         const Icon = item.icon;
         return (
           <Link
