@@ -13,6 +13,21 @@
 - **Recorded Demo:** _[[demo video]](https://drive.google.com/file/d/1K-2IKxa1KrfhXexP_GlAN0mtALoBUZ2i/view?usp=drivesdk)_
 - **Judge Access:** open [https://foodline.com.ng/login](https://foodline.com.ng/login) and expand "Judge access" for one-tap demo credentials (customer, retailer, admin)
 
+Demo credentials:
+
+```bash
+Admin: admin@foodline.com.ng
+Password: Foodline-Admin-2026
+
+The other two seeded logins:
+
+Customer:	adaeze@demo.foodline.com.ng	
+Foodline-Demo-2026
+
+Retailer:	retailer@foodline.com.ng
+Foodline-Retail-2026
+```
+
 ## 🎯 The Problem
 What happens when your salary is guaranteed, but your children cannot eat food because kitchen is empty?
 
