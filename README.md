@@ -10,7 +10,7 @@
 ## 🚀 Live Demo
 - **Live Application:** [https://www.foodline.com.ng](https://www.foodline.com.ng)
 - **Backend API:** [https://www.foodline.com.ng/api](https://www.foodline.com.ng/api) (e.g., `POST /api/webhooks/mono`, `POST /api/webhooks/paystack`)
-- **Recorded Demo:** _[Link to your recorded demo explaining how your solution works using Loom]_
+- **Recorded Demo:** _[[demo video]](https://drive.google.com/file/d/1K-2IKxa1KrfhXexP_GlAN0mtALoBUZ2i/view?usp=drivesdk)_
 - **Judge Access:** open [https://foodline.com.ng/login](https://foodline.com.ng/login) and expand "Judge access" for one-tap demo credentials (customer, retailer, admin)
 
 ## 🎯 The Problem
